@@ -1,0 +1,127 @@
+plugins {
+    id 'fabric-loom' version '1.6-SNAPSHOT'
+    id 'com.github.johnrengelman.shadow' version '8.1.1'
+}
+
+group project.maven_group
+version project.mod_version
+
+java.toolchain.languageVersion = JavaLanguageVersion.of(17)
+
+compileJava {
+    options.encoding = "UTF-8"
+}
+
+repositories {
+    mavenCentral()
+    maven {
+         name = 'ParchmentMC'
+         url = 'https://maven.parchmentmc.org'
+    }
+
+    maven {
+        name = 'Quilt Snapshots'
+        url = 'https://maven.quiltmc.org/repository/snapshot'
+    }
+
+    maven {
+        url = "https://maven.quiltmc.org/repository/release/"
+    }
+
+    maven {
+        name = 'Ladysnake'
+        url = 'https://maven.ladysnake.org/releases'
+    }
+
+    mavenLocal()
+
+    flatDir {
+        dir 'libs'
+    }
+}
+
+dependencies {
+    minecraft "com.mojang:minecraft:${minecraft_version}"
+    mappings loom.layered() {
+        officialMojangMappings()
+        parchment("org.parchmentmc.data:parchment-1.20.1:2023.09.03@zip")
+    }
+    modImplementation "net.fabricmc:fabric-loader:0.15.6"
+    modImplementation "net.fabricmc.fabric-api:fabric-api:0.92.1+1.20.1"
+    implementation 'com.google.code.findbugs:jsr305:3.0.2'
+
+    implementation 'com.fasterxml.jackson.core:jackson-core:2.16.0'
+    implementation 'com.fasterxml.jackson.core:jackson-annotations:2.16.0'
+    implementation 'com.fasterxml.jackson.core:jackson-databind:2.16.0'
+
+    shadow('com.fasterxml.jackson.core:jackson-core:2.16.0')
+    shadow('com.fasterxml.jackson.core:jackson-annotations:2.16.0')
+    shadow('com.fasterxml.jackson.core:jackson-databind:2.16.0')
+
+    // DashScope SDK for Alibaba Cloud TTS (CosyVoice)
+    implementation 'com.alibaba:dashscope-sdk-java:2.19.2'
+    shadow('com.alibaba:dashscope-sdk-java:2.19.2')
+
+    // CCA (Cardinal Components API) - required by Player2NPC
+    modImplementation("dev.onyxstudios.cardinal-components-api:cardinal-components-base:${cca_version}") { transitive = false }
+    modImplementation("dev.onyxstudios.cardinal-components-api:cardinal-components-entity:${cca_version}") { transitive = false }
+    modImplementation("dev.onyxstudios.cardinal-components-api:cardinal-components-world:${cca_version}") { transitive = false }
+}
+
+shadowJar {
+    configurations = [project.configurations.shadow]
+
+    archiveBaseName.set('PlayerEngine')
+    archiveClassifier.set('dev')
+
+    from sourceSets.main.output
+
+    filesMatching('fabric.mod.json') {
+        expand 'version': project.version
+    }
+
+    manifest {
+        attributes(tasks.jar.manifest.attributes)
+        attributes('MixinConfigs': 'mixins.automatone.json')
+    }
+}
+
+remapJar {
+    dependsOn("shadowJar")
+    archiveBaseName.set('PlayerEngine')
+    archiveClassifier.set('')
+    input.set(shadowJar.archiveFile)
+}
+
+java {
+    withSourcesJar()
+}
+
+javadoc {
+    options.addStringOption('Xwerror', '-quiet')
+    options.linkSource true
+    options.encoding "UTF-8"
+    source = sourceSets.main.allJava
+    classpath += sourceSets.main.compileClasspath
+}
+
+jar {
+    from sourceSets.main.output
+
+    preserveFileTimestamps = false
+    reproducibleFileOrder = true
+
+    manifest {
+        attributes(
+                'MixinConfigs': 'mixins.automatone.json',
+
+                'Implementation-Title': 'PlayerEngine',
+                'Implementation-Version': project.version
+        )
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.compilerArgs += ["-Xmaxerrs", "500000"]
+}

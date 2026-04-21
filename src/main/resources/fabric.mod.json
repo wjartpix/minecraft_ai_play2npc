@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "id": "automatone",
+  "version": "${version}",
+  "name": "PlayerEngine + NPC",
+  "description": "A serverside Minecraft pathfinder bot with AI NPC companions.",
+  "authors": [
+    "leijurv",
+    "Brady",
+    "Pyrofab",
+    "Goodbird"
+  ],
+  "contact": {
+    "sources": "https://github.com/Ladysnake/automatone",
+    "issues": "https://github.com/Ladysnake/automatone/issues"
+  },
+  "license": "LGPL-3.0",
+  "icon": "assets/automatone/icon.png",
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "baritone.PlayerEngine",
+      "com.goodbird.player2npc.Player2NPC"
+    ],
+    "client": [
+      "adris.altoclef.PlayerEngineClient",
+      "com.goodbird.player2npc.Player2NPCClient"
+    ],
+    "cardinal-components": [
+      "com.goodbird.player2npc.Player2NPCComponents"
+    ]
+  },
+  "mixins": [
+    "mixins.altoclef.json"
+  ],
+  "depends": {
+    "fabricloader": ">=0.14.0",
+    "fabric": "*"
+  },
+  "custom": {
+    "cardinal-components": [
+      "automatone:core",
+      "automatone:controller",
+      "altoclef:controller",
+      "automatone:selection_manager",
+      "automatone:world_data_provider",
+      "automatone:companion_manager"
+    ]
+  }
+}

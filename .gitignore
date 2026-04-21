@@ -1,0 +1,48 @@
+# === OS ===
+.DS_Store
+**/.DS_Store
+**/*.swp
+Thumbs.db
+
+# === IDE / Editor ===
+# IntelliJ IDEA
+.idea/
+*.iml
+*.ipr
+*.iws
+# VS Code
+.vscode/
+# Eclipse
+.classpath
+.project
+.settings/
+
+# === Gradle ===
+build/
+.gradle/
+classes/
+*.class
+/out
+
+# === Minecraft run directory (generated at runtime) ===
+run/
+autotest/
+
+# === Distribution / Build artifacts ===
+dist/
+volderyarn/
+libs/
+*.jar
+!gradle/wrapper/gradle-wrapper.jar
+
+# === Logs ===
+/logs/
+*.log
+*.log.gz
+
+# === Phase/temp guides (development artifacts) ===
+PHASE3_RUN_GUIDE.md
+
+# === Copyright Files (keep these) ===
+!/.idea/copyright/Baritone.xml
+!/.idea/copyright/profiles_settings.xml
