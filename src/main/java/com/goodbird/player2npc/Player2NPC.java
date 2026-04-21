@@ -4,6 +4,7 @@ import com.goodbird.player2npc.companion.AutomatoneEntity;
 import com.goodbird.player2npc.companion.CompanionManager;
 import com.goodbird.player2npc.network.AutomatoneDespawnRequestPacket;
 import com.goodbird.player2npc.network.AutomatoneSpawnRequestPacket;
+import com.goodbird.player2npc.network.STTAudioPacket;
 
 import adris.altoclef.AltoClefController;
 import net.fabricmc.api.ModInitializer;
@@ -28,6 +29,7 @@ public class Player2NPC implements ModInitializer {
     public static final ResourceLocation SPAWN_PACKET_ID = new ResourceLocation(MOD_ID, "spawn_automatone");
     public static final ResourceLocation SPAWN_REQUEST_PACKET_ID = new ResourceLocation(MOD_ID, "request_spawn_automatone");
     public static final ResourceLocation DESPAWN_REQUEST_PACKET_ID = new ResourceLocation(MOD_ID, "request_despawn_automatone");
+    public static final ResourceLocation STT_AUDIO_PACKET_ID = new ResourceLocation(MOD_ID, "stt_audio");
 
     public static ResourceLocation id(String path) {
         return new ResourceLocation(MOD_ID, path);
@@ -49,6 +51,7 @@ public class Player2NPC implements ModInitializer {
 
         ServerPlayNetworking.registerGlobalReceiver(SPAWN_REQUEST_PACKET_ID, AutomatoneSpawnRequestPacket::handle);
         ServerPlayNetworking.registerGlobalReceiver(DESPAWN_REQUEST_PACKET_ID, AutomatoneDespawnRequestPacket::handle);
+        ServerPlayNetworking.registerGlobalReceiver(STT_AUDIO_PACKET_ID, STTAudioPacket::handle);
 
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> {
             CompanionManager.KEY.get(handler.player).summonAllCompanionsAsync();

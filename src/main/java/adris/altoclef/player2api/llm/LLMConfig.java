@@ -26,6 +26,7 @@ public class LLMConfig {
     private JsonObject providers = new JsonObject();
     private JsonObject proxyConfig = new JsonObject();
     private JsonObject ttsConfig = new JsonObject();
+    private JsonObject sttConfig = new JsonObject();
 
     private LLMConfig() {}
 
@@ -69,6 +70,9 @@ public class LLMConfig {
             if (root.has("tts")) {
                 this.ttsConfig = root.getAsJsonObject("tts");
             }
+            if (root.has("stt")) {
+                this.sttConfig = root.getAsJsonObject("stt");
+            }
             LOGGER.info("LLM config loaded from {}. Active provider: {}", configPath, activeProvider);
         } catch (Exception e) {
             LOGGER.error("Failed to load LLM config from {}", configPath, e);
@@ -108,7 +112,8 @@ public class LLMConfig {
                 + "    }\n"
                 + "  },\n"
                 + "  \"proxy\": { \"enabled\": false, \"host\": \"127.0.0.1\", \"port\": 8001 },\n"
-                + "  \"tts\": { \"enabled\": false }\n"
+                + "  \"tts\": { \"enabled\": false },\n"
+                + "  \"stt\": { \"enabled\": true, \"model\": \"gummy-chat-v1\", \"language\": \"zh\" }\n"
                 + "}\n";
             Files.writeString(configPath, fallbackJson);
             LOGGER.info("Created fallback LLM config at {}", configPath);
@@ -139,4 +144,6 @@ public class LLMConfig {
     }
 
     public JsonObject getTTSConfig() { return ttsConfig; }
+
+    public JsonObject getSTTConfig() { return sttConfig; }
 }

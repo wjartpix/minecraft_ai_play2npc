@@ -32,9 +32,14 @@
     "enabled": true,
     "apiKey": "",
     "model": "cosyvoice-v2",
-    "voice": "longxiaochun",
+    "voice": "longxiaochun_v2",
     "volume": 50,
     "speechRate": 1.0,
     "pitchRate": 1.0
+  },
+  "stt": {
+    "enabled": true,
+    "model": "gummy-chat-v1",
+    "language": "zh"
   }
 }

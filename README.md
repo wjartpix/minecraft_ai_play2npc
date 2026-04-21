@@ -179,7 +179,7 @@ allprojects {
     "enabled": true,
     "apiKey": "",
     "model": "cosyvoice-v2",
-    "voice": "longxiaochun",
+    "voice": "longxiaochun_v2",
     "volume": 50,
     "speechRate": 1.0,
     "pitchRate": 1.0
@@ -203,7 +203,8 @@ allprojects {
 | `providers.qwen.temperature` | 生成温度，越高越随机，默认 `0.7` |
 | `tts.enabled` | 是否启用语音合成，设为 `false` 则 NPC 只显示文字不发声 |
 | `tts.apiKey` | TTS 专用 Key，留空则自动复用 qwen 的 API Key |
-| `tts.voice` | CosyVoice 音色，默认 `longxiaochun`（龙小淳，女声） |
+| `tts.voice` | CosyVoice 音色，默认 `longxiaochun_v2`（龙小淳 v2，女声） |
+| `tts.model` | TTS 模型名称，必须与 voice 版本匹配：`cosyvoice-v2` 对应 `*_v2` 音色，`cosyvoice-v3-flash` 对应 `long*`/`long*_v3` 音色 |
 | `proxy.enabled` | 是否启用 HTTP 代理，用于网络受限环境 |
 
 > **默认配置模板：** `src/main/resources/assets/player2npc/playerengine-llm-default.json`，如需修改默认值可编辑此文件后重新构建。
@@ -269,21 +270,21 @@ allprojects {
 
 TTS 语音合成使用阿里云 CosyVoice 服务，与 LLM 共用同一个 DashScope API Key。**默认已启用**，无需额外配置。
 
-**可选音色列表（部分）：**
+**可选音色列表（cosyvoice-v2 模型，部分）：**
 
 | 音色 ID | 名称 | 特点 |
 |---------|------|------|
-| `longxiaochun` | 龙小淳 | 女声，温柔亲切（默认） |
-| `longyuan` | 龙媛 | 女声，知性大方 |
-| `longhua` | 龙华 | 男声，标准新闻 |
-| `longjielidou` | 龙杰力豆 | 男声，活泼 |
-| `longtong` | 龙彤 | 童声，可爱 |
-| `longxiaobai` | 龙小白 | 男声，阳光 |
-| `longshu` | 龙书 | 男声，沉稳 |
-| `longshuo` | 龙硕 | 男声，自然 |
-| `longanyang` | 龙安阳 | 男声，温和 |
+| `longxiaochun_v2` | 龙小淳 v2 | 女声，温柔亲切（默认） |
+| `longyuan_v2` | 龙媛 v2 | 女声，知性大方 |
+| `longhua_v2` | 龙华 v2 | 男声，标准新闻 |
+| `longjielidou_v2` | 龙杰力豆 v2 | 男声，活泼 |
+| `longtong_v2` | 龙彤 v2 | 童声，可爱 |
+| `longxiaobai_v2` | 龙小白 v2 | 男声，阳光 |
+| `longshu_v2` | 龙书 v2 | 男声，沉稳 |
+| `longshuo_v2` | 龙硕 v2 | 男声，自然 |
+| `longanyang_v2` | 龙安洋 v2 | 男声，温和 |
 
-> 完整音色列表请参见 [阿里云 CosyVoice 文档](https://help.aliyun.com/zh/model-studio/text-to-speech)。
+> **重要：** 模型与音色必须版本匹配！`cosyvoice-v2` 模型只能使用 `*_v2` 后缀的音色，`cosyvoice-v3-flash` 模型使用 `long*` 或 `long*_v3` 后缀的音色。混用会导致 `418` 错误。完整音色列表请参见 [阿里云 CosyVoice 音色列表](https://help.aliyun.com/zh/model-studio/cosyvoice-voice-list)。
 
 **如需关闭 TTS**，将配置文件中 `tts.enabled` 设为 `false`：
 

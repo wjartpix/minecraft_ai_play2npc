@@ -2,17 +2,14 @@
   "schemaVersion": 1,
   "id": "automatone",
   "version": "${version}",
-  "name": "PlayerEngine + NPC",
+  "name": "Player2NPC + AI",
   "description": "A serverside Minecraft pathfinder bot with AI NPC companions.",
   "authors": [
-    "leijurv",
-    "Brady",
-    "Pyrofab",
-    "Goodbird"
+    "wjartpix"
   ],
   "contact": {
-    "sources": "https://github.com/Ladysnake/automatone",
-    "issues": "https://github.com/Ladysnake/automatone/issues"
+    "sources": "https://github.com/wjartpix/minecraft_ai_play2npc",
+    "issues": "https://github.com/wjartpix/minecraft_ai_play2npc/issues"
   },
   "license": "LGPL-3.0",
   "icon": "assets/automatone/icon.png",
