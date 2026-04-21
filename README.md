@@ -1,9 +1,10 @@
 # PlayerEngine + AI NPC — Minecraft 1.20.1 Fabric Mod
 
-基于 [PlayerEngine](https://github.com/Ladysnake/automatone)（Baritone 分支）引擎，集成 AI NPC 伙伴系统的 Minecraft Fabric Mod。NPC 由大语言模型（LLM）驱动，能与玩家自然对话、执行游戏内指令、自主导航和战斗。支持阿里云 CosyVoice 语音合成（TTS），实现语音交互。
+基于 [PlayerEngine](https://github.com/Ladysnake/automatone)（Baritone 分支）引擎，集成 AI NPC 伙伴系统的 Minecraft Fabric Mod。NPC 由大语言模型（LLM）驱动，能与玩家自然对话、执行游戏内指令、自主导航和战斗。支持阿里云 CosyVoice 语音合成（TTS）和 Gummy 语音识别（STT），实现双向语音交互。
 
 **核心特性：**
 - 🤖 LLM 驱动的 AI NPC，支持自然语言对话
+- 🎤 Gummy STT 语音识别，按住 V 键即可语音下达指令
 - 🔊 阿里云 CosyVoice TTS 语音合成，NPC 可"说话"
 - 🔌 可插拔的 LLM Provider 架构，默认接入阿里云千问（DashScope API）
 - 🎮 NPC 可执行 30+ 种游戏指令（采集、建造、战斗、寻路等）
@@ -20,11 +21,12 @@
   - [1.4 克隆仓库](#14-克隆仓库)
   - [1.5 首次构建与启动](#15-首次构建与启动)
   - [1.6 配置文件总览](#16-配置文件总览)
-    - [1.6.1 LLM & TTS 配置](#161-llm--tts-配置--playerengine-llmjson)
+    - [1.6.1 LLM & TTS & STT 配置](#161-llm--tts--stt-配置--playerengine-llmjson)
     - [1.6.2 Bot 行为配置](#162-bot-行为配置--altoclef_settingsjson)
     - [1.6.3 子系统配置](#163-子系统配置altoclefconfigs-目录)
     - [1.6.4 运行时状态文件](#164-运行时状态文件自动管理无需手动编辑)
   - [1.7 配置 TTS 语音合成（可选）](#17-配置-tts-语音合成可选)
+  - [1.8 配置 STT 语音识别（可选）](#18-配置-stt-语音识别可选)
 - [二、AI NPC 交互指南](#二ai-npc-交互指南)
   - [2.1 生成 AI NPC](#21-生成-ai-npc)
   - [2.2 与 NPC 对话](#22-与-npc-对话)
@@ -34,7 +36,8 @@
   - [3.1 系统架构概览](#31-系统架构概览)
   - [3.2 接入新的 LLM 模型](#32-接入新的-llm-模型)
   - [3.3 TTS 语音服务架构](#33-tts-语音服务架构)
-  - [3.4 其他扩展方向](#34-其他扩展方向)
+  - [3.4 STT 语音识别架构](#34-stt-语音识别架构)
+  - [3.5 其他扩展方向](#35-其他扩展方向)
 
 ---
 
@@ -156,7 +159,7 @@ allprojects {
 
 首次启动后，Mod 会自动生成所需的配置文件。以下是本项目的完整配置文件清单：
 
-#### 1.6.1 LLM & TTS 配置 — `playerengine-llm.json`
+#### 1.6.1 LLM & TTS & STT 配置 — `playerengine-llm.json`
 
 **文件位置：** `<游戏目录>/config/playerengine-llm.json`（开发模式下为 `run/config/playerengine-llm.json`）
 
@@ -184,6 +187,11 @@ allprojects {
     "speechRate": 1.0,
     "pitchRate": 1.0
   },
+  "stt": {
+    "enabled": true,
+    "model": "gummy-chat-v1",
+    "language": "zh"
+  },
   "proxy": {
     "enabled": false,
     "host": "127.0.0.1",
@@ -205,6 +213,10 @@ allprojects {
 | `tts.apiKey` | TTS 专用 Key，留空则自动复用 qwen 的 API Key |
 | `tts.voice` | CosyVoice 音色，默认 `longxiaochun_v2`（龙小淳 v2，女声） |
 | `tts.model` | TTS 模型名称，必须与 voice 版本匹配：`cosyvoice-v2` 对应 `*_v2` 音色，`cosyvoice-v3-flash` 对应 `long*`/`long*_v3` 音色 |
+| `stt.enabled` | 是否启用语音识别，设为 `false` 则 V 键 PTT 无效 |
+| `stt.model` | STT 模型名称，默认 `gummy-chat-v1`（阿里云 DashScope Gummy） |
+| `stt.language` | 语音识别语言，默认 `zh`（中文），可选 `en`（英文）等 |
+| `stt.apiKey` | STT 专用 Key，留空则自动复用 qwen 的 API Key |
 | `proxy.enabled` | 是否启用 HTTP 代理，用于网络受限环境 |
 
 > **默认配置模板：** `src/main/resources/assets/player2npc/playerengine-llm-default.json`，如需修改默认值可编辑此文件后重新构建。
@@ -252,7 +264,7 @@ allprojects {
 ```
 <游戏目录>/  (开发模式: run/)
 ├── config/
-│   ├── playerengine-llm.json        ← ★ LLM & TTS 主配置（必填 API Key）
+│   ├── playerengine-llm.json        ← ★ LLM & TTS & STT 主配置（必填 API Key）
 │   ├── chatclef_config.json         ← 聊天偏好（自动生成）
 │   └── {角色名}.txt                  ← 对话历史（自动生成）
 ├── altoclef/
@@ -294,6 +306,46 @@ TTS 语音合成使用阿里云 CosyVoice 服务，与 LLM 共用同一个 DashS
 }
 ```
 
+### 1.8 配置 STT 语音识别（可选）
+
+STT 语音识别使用阿里云 DashScope Gummy 服务（`gummy-chat-v1` 模型），与 LLM 共用同一个 DashScope API Key。**默认已启用**，无需额外配置。
+
+**使用方式：** 在游戏中**按住 V 键**说话，松开后自动识别语音内容并作为聊天消息发送给附近的 NPC。
+
+**交互流程：**
+
+```
+按住 V 键 (PTT) → 麦克风录音
+               → 松开 V 键，录音结束
+               → 音频发送到服务端
+               → Gummy STT 识别为文字
+               → 文字注入 ConversationManager
+               → NPC 生成回复 (文字 + TTS 语音)
+```
+
+**注意事项：**
+- 录音至少需要 **1 秒**，否则提示“录音时间太短”
+- 录音最长 60 秒，超时自动停止
+- NPC 需在 **64 格以内**才能收到语音消息
+- 游戏内可通过“选项 → 按键绑定 → Player2NPC → Push to Talk (Voice)”自定义 PTT 按键
+
+**STT 配置项：**
+
+| 字段 | 默认值 | 说明 |
+|------|--------|------|
+| `stt.enabled` | `true` | 是否启用语音识别 |
+| `stt.model` | `gummy-chat-v1` | Gummy 识别模型，详见 [DashScope 文档](https://help.aliyun.com/zh/model-studio/) |
+| `stt.language` | `zh` | 识别语言，`zh`=中文，`en`=英文，`ja`=日文等 |
+| `stt.apiKey` | `""` | STT 专用 Key，留空自动复用 `providers.qwen.apiKey` |
+
+**如需关闭 STT**，将配置文件中 `stt.enabled` 设为 `false`：
+
+```json
+"stt": {
+    "enabled": false
+}
+```
+
 ---
 
 ## 二、AI NPC 交互指南
@@ -308,20 +360,38 @@ TTS 语音合成使用阿里云 CosyVoice 服务，与 LLM 共用同一个 DashS
 
 ### 2.2 与 NPC 对话
 
+**方式一：文字聊天**
+
 1. 确保 NPC 在你附近（**64 格以内**）
 2. 按 **T 键** 打开聊天框
 3. 输入消息并发送
 4. NPC 会通过千问 LLM 生成回复，显示在聊天框中
 5. 如果 TTS 已启用，NPC 还会"说出"回复内容
 
+**方式二：语音输入**
+
+1. 确保 NPC 在你附近（**64 格以内**）
+2. **按住 V 键** 开始录音，屏幕上方显示“录音中...”
+3. 对着麦克风说话（至少 1 秒）
+4. **松开 V 键** 结束录音，语音自动发送识别
+5. 识别结果显示在聊天栏，NPC 会生成回复
+
+> **提示：** V 键可在“选项 → 按键绑定 → Player2NPC”中自定义。STT 需要在配置中启用（默认已启用）。
+
 **对话流程：**
 
 ```
-玩家输入 → ServerMessageEvents.CHAT_MESSAGE 捕获
-         → ConversationManager 管理对话上下文
-         → LLMCompleter 调用千问 API 生成回复
-         → AgentSideEffects 显示文字 + 触发 TTS
-         → TTSManager → AliyunTTSProvider → 音频播放
+[文字] 玩家输入 → ServerMessageEvents.CHAT_MESSAGE 捕获
+                → ConversationManager 管理对话上下文
+
+[语音] 玩家按住 V → MicrophoneRecorder 录音
+                → 发送 stt_audio 网络包
+                → AliyunSTTProvider (Gummy) 识别为文字
+                → ConversationManager 管理对话上下文
+
+[共同] → LLMCompleter 调用千问 API 生成回复
+        → AgentSideEffects 显示文字 + 触发 TTS
+        → TTSManager → AliyunTTSProvider → 音频播放
 ```
 
 ### 2.3 NPC 可执行的指令
@@ -353,6 +423,13 @@ TTS 语音合成使用阿里云 CosyVoice 服务，与 LLM 共用同一个 DashS
 | `[AliyunTTS] Synthesis successful` | TTS 合成成功 |
 | `TTS audio sent to client` | TTS 音频已发送到客户端播放 |
 | `TTS disabled in config` | TTS 已被配置关闭 |
+| `[PTT] Starting recording` | PTT 按键按下，开始录音 |
+| `[PTT] Stopping recording` | PTT 按键松开，录音结束 |
+| `[STT] Received audio packet` | 服务端收到音频数据 |
+| `[AliyunSTT] Starting recognition` | 开始语音识别 |
+| `[AliyunSTT] Final result` | 语音识别最终结果 |
+| `[STT] Recognition returned empty` | 语音未识别出内容 |
+| `[STT] Recognition result` | 识别成功，文字已注入对话 |
 
 **常见运行时问题：**
 
@@ -362,6 +439,9 @@ TTS 语音合成使用阿里云 CosyVoice 服务，与 LLM 共用同一个 DashS
 | 401/403 错误 | API Key 无效，去 DashScope 控制台重新获取 |
 | NPC 有文字无语音 | 检查 `tts.enabled` 是否为 true；检查日志中 `[AliyunTTS]` 输出 |
 | TTS 合成失败 | 检查 API Key 是否有 CosyVoice 权限；检查网络连接 |
+| 语音识别返回空 | 录音时间太短（至少 1 秒）；麦克风未正常工作 |
+| V 键按下去就停 | PTT 需要按住不放，至少 1 秒后松开 |
+| 提示“麦克风不可用” | 系统无麦克风或权限未授予，检查系统麦克风设置 |
 
 ---
 
@@ -376,23 +456,29 @@ TTS 语音合成使用阿里云 CosyVoice 服务，与 LLM 共用同一个 DashS
 │  │PlayerEngine  │   │ Audio Playback │   │  NPC Render  │ │
 │  │   Client     │◄──│ (AudioUtils)  │   │  & GUI       │ │
 │  └──────┬───────┘   └───────────────┘   └─────────────┘ │
-│         │ Fabric Network Packets                          │
-├─────────┼─────────────────────────────────────────────────┤
-│         ▼            Minecraft Server                     │
-│  ┌──────────────┐   ┌───────────────┐   ┌─────────────┐ │
-│  │  Conversation │──►│  LLMCompleter │──►│  LLM        │ │
-│  │  Manager      │   │               │   │  Provider   │ │
-│  └──────┬───────┘   └───────────────┘   │  Registry   │ │
-│         │                                └──────┬──────┘ │
-│  ┌──────▼───────┐   ┌───────────────┐          │        │
-│  │  AgentSide   │──►│  TTSManager   │   ┌──────▼──────┐ │
-│  │  Effects     │   │               │   │QwenProvider │ │
-│  └──────────────┘   └───────┬───────┘   │OpenAICompat │ │
-│                             │            └─────────────┘ │
-│                      ┌──────▼───────┐                    │
-│                      │ AliyunTTS    │ ◄─── DashScope     │
-│                      │ Provider     │      CosyVoice API │
-│                      └──────────────┘                    │
+│  ┌──────┴───────┐                                       │
+│  │MicrophoneRec.│──PTT(V)──► stt_audio packet ──────────┼──┐
+│  └──────────────┘                                       │  │
+│         │ Fabric Network Packets                          │  │
+├─────────┼─────────────────────────────────────────────────┤  │
+│         ▼            Minecraft Server                     │  │
+│  ┌──────────────┐   ┌───────────────┐   ┌─────────────┐ │  │
+│  │  Conversation │──►│  LLMCompleter │──►│  LLM        │ │  │
+│  │  Manager      │   │               │   │  Provider   │ │  │
+│  └──────┬───────┘   └───────────────┘   │  Registry   │ │  │
+│         │                                └──────┬──────┘ │  │
+│  ┌──────▼───────┐   ┌───────────────┐          │        │  │
+│  │  AgentSide   │──►│  TTSManager   │   ┌──────▼──────┐ │  │
+│  │  Effects     │   │               │   │QwenProvider │ │  │
+│  └──────────────┘   └───────┬───────┘   │OpenAICompat │ │  │
+│                             │            └─────────────┘ │  │
+│                      ┌──────▼───────┐                    │  │
+│                      │ AliyunTTS    │ ◄─── DashScope     │  │
+│                      │ Provider     │      CosyVoice API │  │
+│                      └──────────────┘                    │  │
+│  ┌──────────────┐ ◄────────────────────────────────────────┘  │
+│  │ STTAudioPacket│ ──AliyunSTTProvider──► ConversationManager│
+│  └──────────────┘      (Gummy)                             │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -412,6 +498,9 @@ src/main/java/
 │   │   ├── tts/                    # TTS 语音合成
 │   │   │   ├── AliyunTTSProvider.java  # 阿里云 CosyVoice TTS
 │   │   │   └── TTSConfig.java      # TTS 配置
+│   │   ├── stt/                    # STT 语音识别
+│   │   │   ├── AliyunSTTProvider.java  # 阿里云 Gummy STT
+│   │   │   └── STTConfig.java      # STT 配置
 │   │   ├── manager/
 │   │   │   ├── ConversationManager.java  # 对话管理
 │   │   │   └── TTSManager.java     # TTS 调度与锁
@@ -420,6 +509,10 @@ src/main/java/
 │   └── PlayerEngineClient.java     # 客户端入口（音频播放）
 ├── baritone/                       # 寻路引擎核心
 └── com/goodbird/player2npc/        # NPC 实体/网络/GUI
+    ├── client/audio/
+    │   └── MicrophoneRecorder.java  # 客户端麦克风录音 (PTT)
+    └── network/
+        └── STTAudioPacket.java     # 服务端 STT 音频包处理
 ```
 
 ### 3.2 接入新的 LLM 模型
@@ -492,7 +585,42 @@ AgentSideEffects.onEntityMessage()
 2. 修改 `Player2APIService.textToSpeech()` 中的 Provider 实例化逻辑
 3. 在 `playerengine-llm.json` 的 `tts` 配置中添加相应参数
 
-### 3.4 其他扩展方向
+### 3.4 STT 语音识别架构
+
+STT 调用链路：
+
+```
+Player2NPCClient (客户端)
+  → GLFW 检测 V 键按下 → MicrophoneRecorder.startRecording()
+  → V 键松开 → MicrophoneRecorder.stopRecording() → PCM 音频字节
+  → ClientPlayNetworking.send(stt_audio packet)
+
+STTAudioPacket (服务端)
+  → 读取音频数据 + 语言参数
+  → 异步线程: STTConfig.load() → AliyunSTTProvider.transcribe()
+    → DashScope Gummy API (WebSocket, gummy-chat-v1)
+    → 返回识别文字
+  → server.execute() → ConversationManager.onUserChatMessage()
+    → NPC 生成回复 (文字 + TTS 语音)
+```
+
+**关键文件：**
+
+| 文件 | 位置 | 说明 |
+|------|------|------|
+| `MicrophoneRecorder.java` | `com/goodbird/player2npc/client/audio/` | 客户端麦克风录音，16kHz/16bit/Mono PCM |
+| `STTAudioPacket.java` | `com/goodbird/player2npc/network/` | 服务端音频包处理，STT 调用，文字注入对话 |
+| `AliyunSTTProvider.java` | `adris/altoclef/player2api/stt/` | 阿里云 Gummy STT WebSocket 客户端 |
+| `STTConfig.java` | `adris/altoclef/player2api/stt/` | STT 配置读取（enabled/model/language/apiKey） |
+| `Player2NPCClient.java` | `com/goodbird/player2npc/` | PTT 按键检测（GLFW 原生状态），音频发送 |
+
+**替换为其他 STT 服务：**
+
+1. 创建新的 STT Provider 类（参考 `AliyunSTTProvider.java`），实现 `transcribe(byte[] audioData) → String` 方法
+2. 修改 `STTAudioPacket.handle()` 中的 Provider 实例化逻辑
+3. 在 `playerengine-llm.json` 的 `stt` 配置中添加相应参数
+
+### 3.5 其他扩展方向
 
 | 扩展方向 | 说明 | 修改位置 |
 |---------|------|----------|
@@ -501,7 +629,6 @@ AgentSideEffects.onEntityMessage()
 | **Provider 热切换** | 游戏内指令切换 LLM Provider | `LLMConfig.reload()` + 新增游戏内命令 |
 | **容错与重试** | API 失败时自动重试或 fallback 到备用 Provider | `OpenAICompatibleProvider.chatCompletion()` 中添加重试逻辑 |
 | **多角色人设** | 不同 NPC 使用不同人设和 LLM 配置 | `Prompts.java` 中的 `aiNPCPromptTemplate` + `LLMConfig` 按角色配置 |
-| **STT 语音输入** | 接入语音识别，用语音与 NPC 对话 | `Player2APIService.startSTT()/stopSTT()` + 客户端录音 |
 | **自定义 NPC 皮肤** | 为 NPC 设置自定义皮肤 | `Player2HTTPUtils.getLocalDefaultCharacters()` 中 `skin_url` 字段 |
 | **多 NPC 协作** | 多个 NPC 之间互相对话协作 | `ConversationManager.onAICharacterMessage()` 已支持 NPC 间消息传递 |
 
