@@ -3,8 +3,11 @@ package adris.altoclef.tasksystem;
 import adris.altoclef.AltoClefController;
 import adris.altoclef.Debug;
 import java.util.ArrayList;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 public class TaskRunner {
+   private static final Logger LOGGER = LogManager.getLogger();
    private final ArrayList<TaskChain> chains = new ArrayList<>();
    private final AltoClefController mod;
    private boolean active;
@@ -35,6 +38,13 @@ public class TaskRunner {
             this.cachedCurrentTaskChain.onInterrupt(maxChain);
          }
 
+         if (this.cachedCurrentTaskChain != maxChain) {
+            if (maxChain != null) {
+               LOGGER.info("[Runner] Active chain switched to={} priority={}", maxChain.getName(), maxPriority);
+            } else {
+               LOGGER.info("[Runner] No active chain");
+            }
+         }
          this.cachedCurrentTaskChain = maxChain;
          if (maxChain != null) {
             this.statusReport = "Chain: " + maxChain.getName() + ", priority: " + maxPriority;

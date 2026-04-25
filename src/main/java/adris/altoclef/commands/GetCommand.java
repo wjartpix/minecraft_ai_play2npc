@@ -9,6 +9,7 @@ import adris.altoclef.commandsystem.CommandException;
 import adris.altoclef.commandsystem.ItemList;
 import adris.altoclef.player2api.AgentCommandUtils;
 import adris.altoclef.tasksystem.Task;
+import adris.altoclef.tasks.entity.GiveItemToPlayerTask;
 import adris.altoclef.util.ItemTarget;
 
 public class GetCommand extends Command {
@@ -23,6 +24,23 @@ public class GetCommand extends Command {
    private void getItems(AltoClefController mod, ItemTarget... items) {
       items = AgentCommandUtils.addPresentItemsToTargets(mod, items);
       if (items != null && items.length != 0) {
+         // If we already have enough items in inventory, give them directly to owner
+         // instead of starting a gather/craft chain from scratch.
+         boolean allSatisfied = true;
+         for (ItemTarget target : items) {
+            int have = mod.getItemStorage().getItemCountInventoryOnly(target.getMatches());
+            if (have < target.getTargetCount()) {
+               allSatisfied = false;
+               break;
+            }
+         }
+
+         if (allSatisfied && mod.getOwner() != null) {
+            String ownerName = mod.getOwner().getName().getString();
+            mod.runUserTask(new GiveItemToPlayerTask(ownerName, items), () -> this.finish());
+            return;
+         }
+
          Task targetTask;
          if (items.length == 1) {
             targetTask = TaskCatalogue.getItemTask(items[0]);

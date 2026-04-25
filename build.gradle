@@ -125,3 +125,11 @@ tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
     options.compilerArgs += ["-Xmaxerrs", "500000"]
 }
+
+// Clean up runtime config so that ./gradlew clean runClient always picks up
+// the latest default config from src/main/resources.
+tasks.named('clean') {
+    doLast {
+        delete file('run/config/playerengine-llm.json')
+    }
+}

@@ -34,15 +34,14 @@ public final class PlayerEngineClient implements ClientModInitializer {
       EntityRendererRegistry.register(PlayerEngine.FISHING_BOBBER, CustomFishingBobberRenderer::new);
 
       // Register Aliyun TTS audio packet receiver (new: receives synthesized audio bytes)
+      // Supports sentence-level pipeline: multiple packets are queued and played sequentially.
       ClientPlayNetworking.registerGlobalReceiver(new ResourceLocation("playerengine", "tts_audio"), (client, handler, buf, responseSender) -> {
          String mode = buf.readUtf();
          int audioLength = buf.readInt();
          byte[] audioData = new byte[audioLength];
          buf.readBytes(audioData);
 
-         CompletableFuture.runAsync(() -> {
-            AudioUtils.playWavBytes(audioData);
-         });
+         AudioUtils.enqueueAndPlayWavBytes(audioData);
       });
 
       // Register legacy stream_tts packet receiver (for player2-remote mode)

@@ -24,8 +24,8 @@ public class Player2NPCClient implements ClientModInitializer {
 
     private static final Logger LOGGER = LogManager.getLogger();
 
-    /** Minimum audio bytes for STT: 1 second at 16kHz, 16bit, mono = 32000 bytes */
-    private static final int MIN_STT_AUDIO_BYTES = 32000;
+    /** Minimum audio bytes for STT: 0.5 second at 16kHz, 16bit, mono = 16000 bytes */
+    private static final int MIN_STT_AUDIO_BYTES = 16000;
 
     private static KeyMapping openCharacterScreenKeybind;
     private static KeyMapping pushToTalkKeybind;
@@ -80,6 +80,23 @@ public class Player2NPCClient implements ClientModInitializer {
                     }
                 }
 
+                // Check for VAD auto-stop during recording
+                if (microphoneRecorder.isRecording() && microphoneRecorder.isAutoStopRequested()) {
+                    LOGGER.info("[VAD] Auto-stop detected, processing audio");
+                    byte[] audioData = microphoneRecorder.stopRecording();
+                    if (audioData.length < MIN_STT_AUDIO_BYTES) {
+                        float durationSec = audioData.length / 32000f;
+                        LOGGER.warn("[VAD] Recording too short: {}s ({} bytes)",
+                                String.format("%.1f", durationSec), audioData.length);
+                        client.player.displayClientMessage(
+                                Component.literal("\u00a7e[VAD] \u5f55\u97f3\u65f6\u95f4\u592a\u77ed\uff0c\u8bf7\u91cd\u8bd5"), true);
+                    } else {
+                        sendSTTPacket(audioData);
+                        client.player.displayClientMessage(
+                                Component.literal("\u00a7b[VAD] \u8bed\u97f3\u5df2\u53d1\u9001\uff0c\u7b49\u5f85\u8bc6\u522b..."), true);
+                    }
+                }
+
                 // PTT released: stop recording and send audio
                 if (!pttIsPressed && pttWasPressed) {
                     if (microphoneRecorder.isRecording()) {
@@ -87,12 +104,12 @@ public class Player2NPCClient implements ClientModInitializer {
                         byte[] audioData = microphoneRecorder.stopRecording();
 
                         if (audioData.length < MIN_STT_AUDIO_BYTES) {
-                            // Audio too short for reliable STT (less than 1 second)
+                            // Audio too short for reliable STT (less than 0.5 second)
                             float durationSec = audioData.length / 32000f;
-                            LOGGER.warn("[PTT] Recording too short: {}s ({} bytes, minimum 1s required)",
+                            LOGGER.warn("[PTT] Recording too short: {}s ({} bytes, minimum 0.5s required)",
                                     String.format("%.1f", durationSec), audioData.length);
                             client.player.displayClientMessage(
-                                    Component.literal("\u00a7e[PTT] \u5f55\u97f3\u65f6\u95f4\u592a\u77ed\uff0c\u8bf7\u957f\u6309V\u952e\u8bf4\u8bdd (\u81f3\u5c111\u79d2)"), true);
+                                    Component.literal("\u00a7e[PTT] \u5f55\u97f3\u65f6\u95f4\u592a\u77ed\uff0c\u8bf7\u957f\u6309V\u952e\u8bf4\u8bdd (\u81f3\u5c110.5\u79d2)"), true);
                         } else {
                             sendSTTPacket(audioData);
                             client.player.displayClientMessage(

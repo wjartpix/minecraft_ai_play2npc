@@ -36,6 +36,8 @@ import net.minecraft.core.Vec3i;
 import net.minecraft.world.level.GameRules;
 import net.minecraft.world.level.Level;
 
+import java.util.UUID;
+
 /**
  * We implement:
  * - IAutomatone for this entity to be counted as an automatone (used for
@@ -132,6 +134,14 @@ public class AutomatoneEntity extends LivingEntity
             }
             ConversationManager.sendGreeting(controller, character);
         }
+        // Restore owner from saved UUID
+        if (tag.contains("owner_uuid") && controller != null) {
+            UUID ownerUuid = tag.getUUID("owner_uuid");
+            Player owner = this.level().getPlayerByUUID(ownerUuid);
+            if (owner != null) {
+                controller.setOwner(owner);
+            }
+        }
     }
 
     @Override
@@ -144,6 +154,10 @@ public class AutomatoneEntity extends LivingEntity
             CompoundTag compound = new CompoundTag();
             CharacterUtils.writeToNBT(compound, character);
             tag.put("character", compound);
+        }
+        // Save owner UUID so it persists across world reloads
+        if (controller != null && controller.getOwner() != null) {
+            tag.putUUID("owner_uuid", controller.getOwner().getUUID());
         }
     }
 

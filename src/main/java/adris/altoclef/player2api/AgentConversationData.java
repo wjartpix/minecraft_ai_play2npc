@@ -1,6 +1,7 @@
 package adris.altoclef.player2api;
 
 import java.util.Deque;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentLinkedDeque;
@@ -15,10 +16,16 @@ import com.google.gson.JsonObject;
 import adris.altoclef.AltoClefController;
 import adris.altoclef.player2api.AgentSideEffects.CommandExecutionStopReason;
 import adris.altoclef.player2api.Event.InfoMessage;
+import adris.altoclef.player2api.soul.EmotionEngine;
+import adris.altoclef.player2api.soul.EmotionTrigger;
+import adris.altoclef.player2api.soul.EmotionTriggerType;
+import adris.altoclef.player2api.soul.SoulProfile;
 import adris.altoclef.player2api.status.AgentStatus;
 import adris.altoclef.player2api.status.StatusUtils;
 import adris.altoclef.player2api.status.WorldStatus;
 import adris.altoclef.player2api.utils.Utils;
+import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.LivingEntity;
 
 public class AgentConversationData {
@@ -40,6 +47,15 @@ public class AgentConversationData {
 
     private MessageBuffer altoClefMsgBuffer = new MessageBuffer(10);
 
+    // Feedback deduplication: prevent repeated command finish feedback within 5 seconds
+    private String lastFeedbackCommand = "";
+    private long lastFeedbackTime = 0L;
+    private static final long FEEDBACK_COOLDOWN_MS = 5000;
+
+    // Minimum interval between LLM responses to avoid spam
+    private long lastProcessEndTime = 0L;
+    private static final long MIN_RESPONSE_INTERVAL_MS = 3000;
+
     public AgentConversationData(AltoClefController mod) {
         this.mod = mod;
     }
@@ -53,7 +69,11 @@ public class AgentConversationData {
         if (!enabled || isProcessing || eventQueue.isEmpty()) {
             return 0;
         }
-        return System.nanoTime() - lastProcessTime;
+        long timePriority = System.nanoTime() - lastProcessTime;
+        int maxUrgency = eventQueue.stream()
+                .mapToInt(e -> e.getPriority().ordinal() + 1)
+                .max().orElse(1);
+        return timePriority * maxUrgency;
     }
 
     // get LLM response and add to conversation history
@@ -71,6 +91,14 @@ public class AgentConversationData {
             return;
         }
 
+        // Minimum response interval check (3 seconds)
+        long now = System.currentTimeMillis();
+        if (now - lastProcessEndTime < MIN_RESPONSE_INTERVAL_MS) {
+            LOGGER.debug("Skipping process: minimum response interval not reached ({}ms since last)",
+                    now - lastProcessEndTime);
+            return;
+        }
+
         Consumer<String> onErrMsg = errMsg -> {
             this.isProcessing = false;
             extOnErrMsg.accept(errMsg);
@@ -82,7 +110,64 @@ public class AgentConversationData {
         // prepare conversation history for LLM call
         Event lastEvent = mod.getAIPersistantData().dumpEventQueueToConversationHistoryAndReturnLastEvent(eventQueue,
                 mod.getPlayer2APIService());
+
+        // === Forced Rescue Response (keyword intercept) ===
+        // If owner explicitly asks for rescue/protection, bypass LLM and respond immediately
+        Optional<JsonObject> forcedResponse = tryForcedRescueResponse(lastEvent);
+        if (forcedResponse.isPresent()) {
+            this.isProcessing = true;
+            LOGGER.info("[AICommandBridge] Forced rescue response triggered by keyword");
+            JsonObject resp = forcedResponse.get();
+            String msg = Utils.getStringJsonSafely(resp, "message");
+            String cmd = Utils.getStringJsonSafely(resp, "command");
+            try {
+                mod.getAIPersistantData().addAssistantMessage(msg, mod.getPlayer2APIService());
+                onCharacterEvent.accept(new Event.CharacterMessage(msg, cmd, this));
+            } catch (Exception e) {
+                LOGGER.error("[AICommandBridge/forcedRescue] Error: {}", e.getMessage());
+            } finally {
+                this.isProcessing = false;
+                this.lastProcessEndTime = System.currentTimeMillis();
+            }
+            return;
+        }
+
+        // === Greeting: bypass LLM, use character config directly for instant TTS ===
+        if (this.isGreetingResponse) {
+            // Defer greeting if owner is not yet online (entity may load before player connects)
+            if (mod.getPlayer() == null || mod.getOwner() == null) {
+                LOGGER.info("[AICommandBridge] Owner not yet online, deferring greeting");
+                if (eventQueue.isEmpty()) {
+                    onGreeting();
+                }
+                this.isProcessing = false;
+                this.lastProcessEndTime = System.currentTimeMillis();
+                return;
+            }
+            String greetingText = mod.getAIPersistantData().getCharacter().greetingInfo();
+            if (greetingText != null && !greetingText.isEmpty()) {
+                LOGGER.info("[AICommandBridge] Greeting bypass LLM, using character greetingInfo: {}", greetingText);
+                mod.getAIPersistantData().addAssistantMessage(greetingText, mod.getPlayer2APIService());
+                onCharacterEvent.accept(new Event.CharacterMessage(greetingText, "bodylang greeting", this));
+            } else {
+                LOGGER.warn("[AICommandBridge] Character greetingInfo is empty, skipping greeting TTS");
+            }
+            this.isGreetingResponse = false;
+            this.isProcessing = false;
+            this.lastProcessEndTime = System.currentTimeMillis();
+            return;
+        }
+
         Optional<String> reminderString = getReminderStringFromLastEvent(lastEvent);
+
+        // 注入实时情绪提醒
+        SoulProfile soul = mod.getAIPersistantData().getSoulProfile();
+        if (soul != null) {
+            String emotionReminder = soul.toEmotionReminder();
+            if (!emotionReminder.isEmpty()) {
+                reminderString = Optional.of(reminderString.orElse("") + " " + emotionReminder);
+            }
+        }
 
         String agentStatus = AgentStatus.fromMod(this.mod).toString();
         String worldStatus = WorldStatus.fromMod(this.mod).toString();
@@ -114,9 +199,23 @@ public class AgentConversationData {
                         e.getMessage());
             } finally {
                 this.isProcessing = false;
+                this.lastProcessEndTime = System.currentTimeMillis();
             }
         };
-        completer.processToJson(mod.getPlayer2APIService(), historyWithWrappedStatus, onLLMResponse, onErrMsg, true);
+
+        Runnable onFirstToken = () -> {
+            try {
+                if (mod.getPlayer() instanceof ServerPlayer serverPlayer) {
+                    serverPlayer.displayClientMessage(
+                            Component.literal("\u00a77[AI Companion] 正在思考..."), true);
+                }
+            } catch (Exception e) {
+                LOGGER.debug("Failed to send first-token indicator: {}", e.getMessage());
+            }
+        };
+
+        completer.processToJsonStreaming(mod.getPlayer2APIService(), historyWithWrappedStatus,
+                onFirstToken, onLLMResponse, onErrMsg, true);
     }
 
     private boolean isEventDuplicateOfLastMessage(Event evt) {
@@ -135,7 +234,7 @@ public class AgentConversationData {
         if (eventQueue.size() > MAX_EVENT_QUEUE_SIZE) {
             eventQueue.removeFirst();
         }
-        LOGGER.info("queue for UUID={} name={} adding event={} ", getUUID(), getName(), event);
+        LOGGER.debug("queue for UUID={} name={} adding event={} ", getUUID(), getName(), event);
         eventQueue.add(event);
     }
 
@@ -178,6 +277,7 @@ public class AgentConversationData {
 
     public void onCommandFinish(AgentSideEffects.CommandExecutionStopReason stopReason) {
         LOGGER.info("on command finish for cmd={}", stopReason.commandName());
+        SoulProfile soul = mod.getAIPersistantData().getSoulProfile();
         if (stopReason instanceof CommandExecutionStopReason.Finished) {
             LOGGER.info("on command={} finish case", stopReason.commandName());
             if (shouldIgnoreGreetingDance && stopReason.commandName().contains("bodylang greeting")) {
@@ -188,25 +288,41 @@ public class AgentConversationData {
             } else {
                 shouldIgnoreGreetingDance = false;
             }
-            if (eventQueue.isEmpty()) {
-
-                LOGGER.info("adding cmd={} to queue because it finished and queue not empty", stopReason.commandName());
-                addEventToQueue(new InfoMessage(String.format(
-                        "Command feedback: %s finished running. What shall we do next? If no new action is needed to finish user's request, generate empty command `\"\"`.",
-                        stopReason.commandName())));
-            } else {
-                LOGGER.info("Skipping command stop for cmd={} because queue not empty", stopReason.commandName());
+            // 任务完成触发喜悦+期待
+            if (soul != null) {
+                EmotionEngine.applyTrigger(soul, new EmotionTrigger(EmotionTriggerType.TASK_COMPLETE));
             }
+
+            // Feedback deduplication: skip if same command finished within 5 seconds
+            long now = System.currentTimeMillis();
+            String cmdName = stopReason.commandName();
+            if (cmdName.equals(lastFeedbackCommand) && (now - lastFeedbackTime) < FEEDBACK_COOLDOWN_MS) {
+                LOGGER.info("Skipping duplicate feedback for cmd={} (within {}ms)", cmdName, FEEDBACK_COOLDOWN_MS);
+                return;
+            }
+            lastFeedbackCommand = cmdName;
+            lastFeedbackTime = now;
+
+            LOGGER.info("adding cmd={} finish feedback to queue", stopReason.commandName());
+            addEventToQueue(new InfoMessage(String.format(
+                    "Command feedback: %s finished.",
+                    stopReason.commandName())));
         } else if (stopReason instanceof CommandExecutionStopReason.Error) {
             LOGGER.info("adding cmd={} to queue because it errored", stopReason.commandName());
+            // 任务失败触发悲伤（尽责者还会生气）
+            if (soul != null) {
+                EmotionEngine.applyTrigger(soul, new EmotionTrigger(EmotionTriggerType.TASK_FAIL));
+            }
             addEventToQueue(new InfoMessage(String.format(
                     "Command feedback: %s FAILED. The error was %s.",
                     stopReason.commandName(),
                     ((CommandExecutionStopReason.Error) stopReason).errMsg())));
-        } else {
-            LOGGER.info("Skipping command stop for cmd={} because it was cancelled", stopReason.commandName());
+        } else if (stopReason instanceof CommandExecutionStopReason.Cancelled) {
+            LOGGER.info("adding cmd={} to queue because it was cancelled", stopReason.commandName());
+            addEventToQueue(new InfoMessage(String.format(
+                    "Command feedback: %s was CANCELLED (likely because a new command or stop was issued).",
+                    stopReason.commandName())));
         }
-        // (if canceled dont modify queue)
     }
 
     // Utils:
@@ -244,6 +360,85 @@ public class AgentConversationData {
 
     public String getName() {
         return getCharacter().shortName();
+    }
+
+    // ========== Forced Rescue Response (keyword intercept) ==========
+
+    private static final String[] RESCUE_KEYWORDS = {"救命", "救我", "保护我", "帮我打怪", "有僵尸", "有怪物", "快来", "危险"};
+    private static final String[] ATTACK_KEYWORDS = {"打怪", "杀怪", "攻击", "帮我打", "清理怪物", "攻打", "干掉", "消灭"};
+
+    private static final Map<String, String> CN_TO_EN_ENTITY = Map.ofEntries(
+        Map.entry("苦力怕", "creeper"),
+        Map.entry("爬行者", "creeper"),
+        Map.entry("僵尸", "zombie"),
+        Map.entry("骷髅", "skeleton"),
+        Map.entry("蜘蛛", "spider"),
+        Map.entry("末影人", "enderman"),
+        Map.entry("史莱姆", "slime"),
+        Map.entry("女巫", "witch"),
+        Map.entry("烈焰人", "blaze"),
+        Map.entry("恶魂", "ghast"),
+        Map.entry("猪灵", "piglin"),
+        Map.entry("疣猪兽", "hoglin")
+    );
+
+    private Optional<JsonObject> tryForcedRescueResponse(Event lastEvent) {
+        if (!(lastEvent instanceof Event.UserMessage userMsg)) {
+            return Optional.empty();
+        }
+        // Only intercept owner's rescue requests
+        String ownerUsername = getMod().getOwnerUsername();
+        // If owner is unknown (null), skip the username check — the message already reached
+        // this NPC via proximity, so it's reasonable to respond to rescue/attack requests.
+        if (!"UNKNOWN OWNER".equals(ownerUsername) && !userMsg.userName().equals(ownerUsername)) {
+            return Optional.empty();
+        }
+        String content = userMsg.getConversationHistoryString().toLowerCase();
+        boolean isAttack = false;
+        boolean isRescue = false;
+        for (String kw : ATTACK_KEYWORDS) {
+            if (content.contains(kw.toLowerCase())) {
+                isAttack = true;
+                break;
+            }
+        }
+        for (String kw : RESCUE_KEYWORDS) {
+            if (content.contains(kw.toLowerCase())) {
+                isRescue = true;
+                break;
+            }
+        }
+        if (!isAttack && !isRescue) {
+            return Optional.empty();
+        }
+
+        String targetEntity = extractEntityName(content);
+
+        JsonObject resp = new JsonObject();
+        if (isAttack) {
+            if (targetEntity != null) {
+                resp.addProperty("message", "主人，我来了！让我来消灭那个" + targetEntity + "！");
+                resp.addProperty("command", "attack " + targetEntity + " 1");
+            } else {
+                resp.addProperty("message", "主人，我来了！让我来消灭这些怪物！");
+                resp.addProperty("command", "attack nearest_hostile 3");
+            }
+            resp.addProperty("reason", "forced attack response by keyword intercept");
+        } else {
+            resp.addProperty("message", "主人别怕，我马上来救你！");
+            resp.addProperty("command", "follow_owner");
+            resp.addProperty("reason", "forced rescue response by keyword intercept");
+        }
+        return Optional.of(resp);
+    }
+
+    private String extractEntityName(String content) {
+        for (Map.Entry<String, String> entry : CN_TO_EN_ENTITY.entrySet()) {
+            if (content.contains(entry.getKey())) {
+                return entry.getValue();
+            }
+        }
+        return null;
     }
 
 }

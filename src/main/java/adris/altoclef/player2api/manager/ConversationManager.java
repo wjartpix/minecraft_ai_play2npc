@@ -32,7 +32,7 @@ public class ConversationManager {
                                                               // called
 
         public static boolean isConversationLocked() {
-            return waitingForResponseLock || TTSManager.isLocked();
+            return waitingForResponseLock;
         }
     }
 
@@ -75,9 +75,34 @@ public class ConversationManager {
 
     // ## Callbacks (need to register these externally)
 
+    // Keywords that indicate the user wants the NPC to come/find them,
+    // bypassing the distance check so the message reaches NPCs anywhere.
+    private static final String[] SUMMON_KEYWORDS = {
+            "过来", "来这", "来找我", "你在哪", "快过来",
+            "过来一下", "到这来", "到这里来"
+    };
+
+    private static boolean containsSummonKeyword(String message) {
+        String lower = message.toLowerCase();
+        for (String kw : SUMMON_KEYWORDS) {
+            if (lower.contains(kw)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     // register when a user sends a chat message
     public static void onUserChatMessage(UserMessage msg) {
         LOGGER.info("User message event={}", msg);
+
+        boolean isSummon = containsSummonKeyword(msg.message());
+        if (isSummon) {
+            LOGGER.info("Summon keyword detected, broadcasting to ALL NPCs: {}", msg.message());
+            queueData.values().forEach(data -> data.onEvent(msg));
+            return;
+        }
+
         // will add to entities close to the user:
         filterQueueData(d -> isCloseToPlayer(d, msg.userName())).forEach(data -> {
             data.onEvent(msg);

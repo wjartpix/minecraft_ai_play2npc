@@ -61,7 +61,30 @@ public class Utils {
    public static JsonObject parseCleanedJson(String content) throws JsonSyntaxException {
       content = content.replaceAll("^```json\\s*", "").replaceAll("\\s*```$", "").trim();
       JsonParser parser = new JsonParser();
-      return parser.parse(content).getAsJsonObject();
+
+      // Attempt 1: direct parse
+      try {
+         return parser.parse(content).getAsJsonObject();
+      } catch (Exception e) {
+         // Attempt 2: extract JSON object from surrounding text (e.g. model added prose)
+         int firstBrace = content.indexOf('{');
+         int lastBrace = content.lastIndexOf('}');
+         if (firstBrace != -1 && lastBrace != -1 && lastBrace > firstBrace) {
+            String extracted = content.substring(firstBrace, lastBrace + 1);
+            try {
+               return parser.parse(extracted).getAsJsonObject();
+            } catch (Exception ex) {
+               // Fall through to attempt 3
+            }
+         }
+
+         // Attempt 3: wrap plain text as a message-only response
+         JsonObject fallback = new JsonObject();
+         fallback.addProperty("reason", "Model returned non-JSON response");
+         fallback.addProperty("command", "");
+         fallback.addProperty("message", content);
+         return fallback;
+      }
    }
 
    public static String[] splitLinesToArray(String input) {

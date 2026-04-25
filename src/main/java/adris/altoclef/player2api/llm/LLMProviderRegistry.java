@@ -1,6 +1,7 @@
 package adris.altoclef.player2api.llm;
 
 import adris.altoclef.player2api.llm.impl.OpenAICompatibleProvider;
+import adris.altoclef.player2api.llm.impl.QwenLocalProvider;
 import adris.altoclef.player2api.llm.impl.QwenProvider;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -31,6 +32,8 @@ public class LLMProviderRegistry {
     private void registerBuiltins() {
         register(new QwenProvider());
         register(new OpenAICompatibleProvider());
+        // Register local Ollama provider (e.g. qwen2.5:7b running on localhost:11434)
+        register(new QwenLocalProvider());
         LOGGER.info("Registered {} built-in LLM providers", providers.size());
     }
 

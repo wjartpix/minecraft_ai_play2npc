@@ -14,6 +14,8 @@ import adris.altoclef.util.progresscheck.MovementProgressChecker;
 import adris.altoclef.util.slots.Slot;
 import baritone.api.pathing.goals.GoalRunAway;
 import java.util.Optional;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.inventory.ClickType;
 import net.minecraft.world.item.ItemStack;
@@ -21,6 +23,7 @@ import net.minecraft.world.phys.EntityHitResult;
 import net.minecraft.world.phys.HitResult.Type;
 
 public abstract class AbstractDoToEntityTask extends Task implements ITaskRequiresGrounded {
+   private static final Logger LOGGER = LogManager.getLogger();
    protected final MovementProgressChecker progress = new MovementProgressChecker();
    private final double maintainDistance;
    private final double combatGuardLowerRange;
@@ -91,15 +94,16 @@ public abstract class AbstractDoToEntityTask extends Task implements ITaskRequir
             mod.getBaritone().getCustomGoalProcess().setGoalAndPath(new GoalRunAway(maintainDistance, entity.blockPosition()));
          }
 
-         if (mod.getControllerExtras().inRange(entity)
+         boolean canAttack = mod.getControllerExtras().inRange(entity)
             && result != null
-            && result.getType() == Type.ENTITY
-            && !mod.getFoodChain().needsToEat()
-            && !mod.getMLGBucketChain().isFalling(mod)
-            && mod.getMLGBucketChain().doneMLG()
-            && !mod.getMLGBucketChain().isChorusFruiting()
-            && mod.getBaritone().getPathingBehavior().isSafeToCancel()
-            && mod.getPlayer().onGround()) {
+            && result.getType() == Type.ENTITY;
+
+         boolean isBusyWithHigherPriority = mod.getMLGBucketChain().isFalling(mod)
+            || !mod.getMLGBucketChain().doneMLG()
+            || mod.getMLGBucketChain().isChorusFruiting();
+
+         if (canAttack && !isBusyWithHigherPriority) {
+            LOGGER.debug("[Attack] Entity interact: target={} inRange=true", entity.getType().toShortString());
             this.progress.reset();
             return this.onEntityInteract(mod, entity);
          }

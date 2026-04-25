@@ -30,6 +30,15 @@ public class FollowPlayerTask extends Task {
       AltoClefController mod = this.controller;
       Optional<Vec3> lastPos = mod.getEntityTracker().getPlayerMostRecentPosition(this.playerName);
       if (lastPos.isEmpty()) {
+         // Fallback: try to find player directly from world player list even if not in render distance
+         for (Player p : mod.getWorld().players()) {
+            if (p.getName().getString().equals(this.playerName)) {
+               lastPos = Optional.of(p.position());
+               break;
+            }
+         }
+      }
+      if (lastPos.isEmpty()) {
          this.setDebugState("No player found/detected. Doing nothing until player loads into render distance.");
          return null;
       } else {

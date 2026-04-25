@@ -8,6 +8,8 @@ import adris.altoclef.util.helpers.LookHelper;
 import adris.altoclef.util.helpers.StorageHelper;
 import adris.altoclef.util.slots.PlayerSlot;
 import java.util.List;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
@@ -16,6 +18,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.TieredItem;
 
 public abstract class AbstractKillEntityTask extends AbstractDoToEntityTask {
+   private static final Logger LOGGER = LogManager.getLogger();
    private static final double OTHER_FORCE_FIELD_RANGE = 2.0;
    private static final double CONSIDER_COMBAT_RANGE = 10.0;
 
@@ -71,12 +74,17 @@ public abstract class AbstractKillEntityTask extends AbstractDoToEntityTask {
 
    @Override
    protected Task onEntityInteract(AltoClefController mod, Entity entity) {
-      if (!equipWeapon(mod)) {
-         float hitProg = this.getAttackCooldownProgress(mod.getPlayer(), 0.0F);
-         if (hitProg >= 1.0F && (mod.getPlayer().onGround() || mod.getPlayer().getDeltaMovement().y() < 0.0 || mod.getPlayer().isInWater())) {
-            LookHelper.lookAt(mod, entity.getEyePosition());
-            mod.getControllerExtras().attack(entity);
-         }
+      if (equipWeapon(mod)) {
+         LOGGER.debug("[Attack] Equipping weapon, deferring attack on {}", entity.getType().toShortString());
+         return null;
+      }
+      float hitProg = this.getAttackCooldownProgress(mod.getPlayer(), 0.0F);
+      if (hitProg >= 1.0F) {
+         LOGGER.info("[Attack] Attacking entity: {} (cooldown={})", entity.getType().toShortString(), hitProg);
+         LookHelper.lookAt(mod, entity.getEyePosition());
+         mod.getControllerExtras().attack(entity);
+      } else {
+         LOGGER.debug("[Attack] Attack on cooldown for {}: {}", entity.getType().toShortString(), hitProg);
       }
 
       return null;

@@ -12,6 +12,7 @@ public class WorldStatus extends ObjectStatus {
          .add("nearby hostiles", StatusUtils.getNearbyHostileMobs(mod))
          .add("nearby players", StatusUtils.getNearbyPlayers(mod))
          .add("nearby other npcs", StatusUtils.getNearbyNPCs(mod))
+         .add("ownerDanger", StatusUtils.getOwnerDangerStatus(mod))
          .add("difficulty", StatusUtils.getDifficulty(mod))
          .add("timeInfo", StatusUtils.getTimeString(mod));
    }

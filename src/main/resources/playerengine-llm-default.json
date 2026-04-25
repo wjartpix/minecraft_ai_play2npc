@@ -1,0 +1,88 @@
+{
+  "_comment_overview": "=== AI NPC 核心配置文件 === 包含 LLM 大模型 + TTS 语音合成 + STT 语音识别 三合一配置",
+  "_comment_note": "修改此文件后需重启游戏生效。默认模板位于 src/main/resources/playerengine-llm-default.json",
+  "_comment_warning": "请勿将此文件中的 API Key 提交到公共代码仓库！",
+
+  "_comment_activeProvider": "当前使用的 LLM 提供商。可选: qwen_local(本地Ollama) / qwen(阿里云通义) / openai / player2-remote(官方远程模式)",
+  "activeProvider": "qwen_local",
+
+  "providers": {
+    "_comment_qwenlocal": "本地 Ollama 模型 — 无需 API Key，需提前在本地运行 `ollama run qwen2.5:7b`",
+    "qwen_local": {
+      "enabled": true,
+      "apiUrl": "http://localhost:11434/v1",
+      "apiKey": "ollama",
+      "model": "qwen2.5:7b",
+      "maxTokens": 512,
+      "temperature": 0.7
+    },
+    "_comment_qwen": "阿里云 DashScope 通义千问 — 推荐国内用户使用，速度快、价格低",
+    "qwen": {
+      "enabled": false,
+      "apiUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+      "apiKey": "",
+      "model": "qwen-turbo",
+      "maxTokens": 512,
+      "temperature": 0.7
+    },
+    "_comment_openai": "OpenAI GPT — 需要海外网络环境和 OpenAI API Key",
+    "openai": {
+      "enabled": false,
+      "apiUrl": "https://api.openai.com/v1",
+      "apiKey": "",
+      "model": "gpt-4-turbo-preview",
+      "maxTokens": 8000,
+      "temperature": 0.7
+    },
+    "_comment_player2remote": "Player2 官方远程服务 — 需要 player2.game 账号认证",
+    "player2-remote": {
+      "enabled": false,
+      "apiUrl": "https://api.player2.game",
+      "note": "Original remote mode, requires player2.game authentication"
+    }
+  },
+
+  "_comment_proxy": "HTTP 代理设置 — 仅在国内访问 OpenAI 等海外服务时可能需要",
+  "proxy": {
+    "enabled": false,
+    "host": "127.0.0.1",
+    "port": 8001
+  },
+
+  "_comment_tts": "=== TTS 语音合成配置 (阿里云 CosyVoice) === 为空则复用上方 qwen 的 apiKey",
+  "tts": {
+    "_comment_tts_enabled": "是否启用 NPC 语音说话",
+    "enabled": true,
+    "apiKey": "",
+    "_comment_tts_model": "CosyVoice 模型版本。可选: cosyvoice-v3-flash(默认) / cosyvoice-v3 / cosyvoice-v2",
+    "model": "cosyvoice-v3-flash",
+    "_comment_tts_voice": "音色ID。可选: longanhuan(默认中文女声) / longdanv2(中文女声) / longshu(中文男声) / longyue(中文童声) / longjingwen(英文女声)",
+    "voice": "longanhuan",
+    "_comment_tts_volume": "音量 0~100",
+    "volume": 50,
+    "_comment_tts_speechRate": "语速倍率。>1.0 加快，<1.0 减慢。NPC 情绪系统会自动覆盖此值",
+    "speechRate": 1.0,
+    "_comment_tts_pitchRate": "音调倍率。>1.0 升高，<1.0 降低。NPC 情绪系统会自动覆盖此值",
+    "pitchRate": 1.0
+  },
+
+  "_comment_stt": "=== STT 语音识别配置 (阿里云 DashScope 实时语音转写) ===",
+  "stt": {
+    "_comment_stt_enabled": "是否启用玩家语音输入（按住按键说话）",
+    "enabled": true,
+    "_comment_stt_model": "语音识别模型。可选: gummy-chat-v1(默认中文对话优化) / paraformer-realtime-v2",
+    "model": "gummy-chat-v1",
+    "_comment_stt_language": "识别语言。可选: zh(中文) / en(英文) / ja(日文) / ko(韩文) / auto(自动检测)",
+    "language": "zh"
+  },
+
+  "_comment_progressVoice": "=== NPC 任务进度语音反馈配置 ===",
+  "progressVoice": {
+    "_comment_enabled": "是否启用任务进度语音播报（NPC 做长任务时定期语音反馈）",
+    "enabled": true,
+    "_comment_intervalMin": "最小播报间隔（毫秒），默认 3000",
+    "intervalMin": 3000,
+    "_comment_intervalMax": "最大播报间隔（毫秒），默认 5000",
+    "intervalMax": 5000
+  }
+}

@@ -30,9 +30,42 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.util.Queue;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentLinkedQueue;
 
 public class AudioUtils {
     private static final String WEB_API_URL = "https://api.player2.game";
+
+    /** Queue for sequential TTS audio playback (sentence-level pipeline). */
+    private static final Queue<byte[]> audioQueue = new ConcurrentLinkedQueue<>();
+    private static volatile boolean isPlaying = false;
+
+    /**
+     * Enqueue WAV audio data for sequential playback.
+     * Multiple audio segments (e.g. from sentence-level TTS) will play
+     * one after another without overlapping.
+     */
+    public static void enqueueAndPlayWavBytes(byte[] wavData) {
+        if (wavData == null || wavData.length == 0) {
+            return;
+        }
+        audioQueue.offer(wavData);
+        if (!isPlaying) {
+            CompletableFuture.runAsync(AudioUtils::playQueue);
+        }
+    }
+
+    private static void playQueue() {
+        isPlaying = true;
+        while (!audioQueue.isEmpty()) {
+            byte[] wavData = audioQueue.poll();
+            if (wavData != null) {
+                playWavBytes(wavData);
+            }
+        }
+        isPlaying = false;
+    }
 
     /**
      * Play WAV audio data from a byte array.

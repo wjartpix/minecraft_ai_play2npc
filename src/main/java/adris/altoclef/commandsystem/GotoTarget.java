@@ -25,6 +25,10 @@ public class GotoTarget {
          line = line.substring(1, line.length() - 1);
       }
 
+      // Tolerate comma-separated coordinates (common LLM mistake) and collapse whitespace
+      line = line.replace(",", " ");
+      line = line.replaceAll("\\s+", " ").trim();
+
       String[] parts = line.split(" ");
       List<Integer> numbers = new ArrayList<>();
       Dimension dimension = null;

@@ -1,15 +1,19 @@
 package adris.altoclef;
 
 import adris.altoclef.player2api.Character;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 public class Debug {
+   private static final Logger LOGGER = LogManager.getLogger("AltoClef");
+
    private static final int DEBUG_LOG_LEVEL = 0;
    private static final int WARN_LOG_LEVEL = 1;
    private static final int ERROR_LOG_LEVEL = 2;
 
    public static void logInternal(String message) {
       if (canLog(0)) {
-         System.out.println("ALTO CLEF: " + message);
+         LOGGER.info("[Internal] {}", message);
       }
    }
 
@@ -44,7 +48,7 @@ public class Debug {
 
    public static void logWarning(String message) {
       if (canLog(1)) {
-         System.out.println("ALTO CLEF: WARNING: " + message);
+         LOGGER.warn("[Warn] {}", message);
       }
    }
 
@@ -55,9 +59,7 @@ public class Debug {
    public static void logError(String message) {
       String stacktrace = getStack(2);
       if (canLog(2)) {
-         System.err.println(message);
-         System.err.println("at:");
-         System.err.println(stacktrace);
+         LOGGER.error("[Error] {}\nat:\n{}", message, stacktrace);
       }
    }
 
@@ -86,6 +88,7 @@ public class Debug {
       switch (enabledLogLevel) {
          case "NONE":
          case "ALL":
+            return true;
          case "NORMAL":
             return level == 1 || level == 2;
          case "WARN":

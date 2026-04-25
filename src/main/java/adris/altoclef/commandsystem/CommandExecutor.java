@@ -5,8 +5,11 @@ import adris.altoclef.Debug;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.function.Consumer;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 public class CommandExecutor {
+   private static final Logger LOGGER = LogManager.getLogger();
    private final HashMap<String, Command> commandSheet = new HashMap<>();
    private final AltoClefController mod;
 
@@ -64,8 +67,10 @@ public class CommandExecutor {
             }
          } catch (CommandException var7) {
             getException.accept(var7);
+            return;
          }
 
+         LOGGER.info("[CmdExec] Parsed command parts={}", (Object) parts);
          this.executeRecursive(commands, parts, 0, onFinish, getException);
       }
    }

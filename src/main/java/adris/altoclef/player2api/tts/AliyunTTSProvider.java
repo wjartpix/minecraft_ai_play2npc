@@ -48,6 +48,10 @@ public class AliyunTTSProvider {
      * @return WAV audio data as byte array, or null if synthesis fails
      */
     public byte[] synthesize(String text) {
+        return synthesize(text, this.speechRate, this.pitchRate);
+    }
+
+    public byte[] synthesize(String text, float overrideSpeechRate, float overridePitchRate) {
         if (text == null || text.isBlank()) {
             LOGGER.warn("[AliyunTTS] Empty text, skipping synthesis");
             return null;
@@ -67,20 +71,20 @@ public class AliyunTTSProvider {
                     .voice(voice)
                     .format(SpeechSynthesisAudioFormat.WAV_22050HZ_MONO_16BIT)
                     .volume(volume)
-                    .speechRate(speechRate)
-                    .pitchRate(pitchRate)
+                    .speechRate(overrideSpeechRate)
+                    .pitchRate(overridePitchRate)
                     .build();
 
             synthesizer = new SpeechSynthesizer(param, null);
-            LOGGER.info("[AliyunTTS] Synthesizing text: '{}' with model={}, voice={}",
-                    text.length() > 50 ? text.substring(0, 50) + "..." : text, model, voice);
+            LOGGER.info("[AliyunTTS] Synthesizing text: '{}' with model={}, voice={}, speechRate={}, pitchRate={}",
+                    text.length() > 50 ? text.substring(0, 50) + "..." : text, model, voice, overrideSpeechRate, overridePitchRate);
 
             ByteBuffer audioBuffer = synthesizer.call(text);
 
             if (audioBuffer != null && audioBuffer.remaining() > 0) {
                 byte[] audioData = new byte[audioBuffer.remaining()];
                 audioBuffer.get(audioData);
-                LOGGER.info("[AliyunTTS] Synthesis successful, audio size:  bytes, requestId: {}",
+                LOGGER.info("[AliyunTTS] Synthesis successful, audio size: {} bytes, requestId: {}",
                         audioData.length, synthesizer.getLastRequestId());
                 return audioData;
             } else {

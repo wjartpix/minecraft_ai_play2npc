@@ -5,8 +5,11 @@ import adris.altoclef.Debug;
 import adris.altoclef.tasksystem.Task;
 import adris.altoclef.tasksystem.TaskChain;
 import adris.altoclef.tasksystem.TaskRunner;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 public abstract class SingleTaskChain extends TaskChain {
+   private static final Logger LOGGER = LogManager.getLogger();
    protected Task mainTask = null;
    private boolean interrupted = false;
    private final AltoClefController mod;
@@ -51,12 +54,14 @@ public abstract class SingleTaskChain extends TaskChain {
    public void setTask(Task task) {
       if (this.mainTask == null || !this.mainTask.equals(task)) {
          if (this.mainTask != null) {
+            LOGGER.info("[Task] Chain={} switching task from {} to {}", this.getClass().getSimpleName(), this.mainTask.getClass().getSimpleName(), task != null ? task.getClass().getSimpleName() : "null");
             this.mainTask.stop(task);
          }
 
          this.mainTask = task;
          if (task != null) {
             task.reset();
+            LOGGER.info("[Task] Chain={} started task={}", this.getClass().getSimpleName(), task.getClass().getSimpleName());
          }
       }
    }

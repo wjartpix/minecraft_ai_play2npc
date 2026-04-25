@@ -1,7 +1,6 @@
 package adris.altoclef.player2api.utils;
 
 import adris.altoclef.player2api.Character;
-import adris.altoclef.player2api.Player2APIService;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
@@ -15,7 +14,7 @@ import net.minecraft.world.entity.player.Player;
 
 public class CharacterUtils {
    public static Character DEFAULT_CHARACTER = new Character(
-      "AI agent", "AI", "Greetings", "You are a helpful AI Agent", "minecraft:textures/entity/player/wide/steve.png", new String[0]
+      "琪琪", "琪琪", "你好呀！我是琪琪，很高兴见到主人！", "琪琪是主人贴心的AI伙伴，陪伴主人在Minecraft世界中冒险。", "minecraft:textures/entity/player/wide/steve.png", new String[0]
    );
 
    public static Character parseFirstCharacter(Map<String, JsonElement> responseMap) {

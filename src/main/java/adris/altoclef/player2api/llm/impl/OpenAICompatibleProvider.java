@@ -14,6 +14,7 @@ import java.net.InetSocketAddress;
 import java.net.Proxy;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.util.function.Consumer;
 
 /**
  * Generic OpenAI-compatible LLM provider.
@@ -43,8 +44,11 @@ public class OpenAICompatibleProvider implements LLMProvider {
         return providerId;
     }
 
-    @Override
-    public JsonObject chatCompletion(JsonArray messages) throws Exception {
+    /**
+     * Build the common request body and connection for chat completions.
+     * @param stream if true, adds "stream": true to the request body
+     */
+    private HttpURLConnection prepareConnection(JsonArray messages, boolean stream) throws Exception {
         JsonObject config = LLMConfig.getInstance().getProviderConfig(configKey);
         String apiUrl = config.has("apiUrl") ? config.get("apiUrl").getAsString() : "https://api.openai.com/v1";
         String apiKey = config.has("apiKey") ? config.get("apiKey").getAsString() : "";
@@ -62,11 +66,15 @@ public class OpenAICompatibleProvider implements LLMProvider {
         requestBody.add("messages", messages);
         requestBody.addProperty("max_tokens", maxTokens);
         requestBody.addProperty("temperature", temperature);
+        if (stream) {
+            requestBody.addProperty("stream", true);
+        }
 
         String requestJson = GSON.toJson(requestBody);
         String endpoint = apiUrl + "/chat/completions";
 
-        LOGGER.info("[{}] Sending chat completion request to {} with model {}", providerId, endpoint, model);
+        LOGGER.info("[{}] Sending chat completion request to {} with model {} (stream={})",
+                providerId, endpoint, model, stream);
 
         // Set up connection
         URL url = new URL(endpoint);
@@ -95,6 +103,13 @@ public class OpenAICompatibleProvider implements LLMProvider {
             os.write(requestJson.getBytes(StandardCharsets.UTF_8));
         }
 
+        return conn;
+    }
+
+    @Override
+    public JsonObject chatCompletion(JsonArray messages) throws Exception {
+        HttpURLConnection conn = prepareConnection(messages, false);
+
         // Read response
         int statusCode = conn.getResponseCode();
         InputStream is = (statusCode >= 200 && statusCode < 300)
@@ -116,6 +131,72 @@ public class OpenAICompatibleProvider implements LLMProvider {
         JsonObject response = GSON.fromJson(sb.toString(), JsonObject.class);
         LOGGER.info("[{}] Chat completion successful", providerId);
         return response;
+    }
+
+    @Override
+    public void chatCompletionStream(JsonArray messages, Consumer<String> onToken,
+            Consumer<String> onComplete, Consumer<Exception> onError) throws Exception {
+        HttpURLConnection conn = null;
+        try {
+            conn = prepareConnection(messages, true);
+
+            int statusCode = conn.getResponseCode();
+            InputStream is = (statusCode >= 200 && statusCode < 300)
+                ? conn.getInputStream() : conn.getErrorStream();
+
+            if (statusCode < 200 || statusCode >= 300) {
+                StringBuilder errSb = new StringBuilder();
+                try (BufferedReader reader = new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8))) {
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        errSb.append(line);
+                    }
+                }
+                LOGGER.error("[{}] Streaming API returned status {}: {}", providerId, statusCode, errSb);
+                throw new Exception("LLM API error (HTTP " + statusCode + "): " + errSb);
+            }
+
+            StringBuilder fullText = new StringBuilder();
+            boolean firstToken = true;
+
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    if (line.startsWith("data: ")) {
+                        String data = line.substring(6);
+                        if ("[DONE]".equals(data.trim())) {
+                            break;
+                        }
+                        try {
+                            JsonObject chunk = GSON.fromJson(data, JsonObject.class);
+                            if (chunk != null && chunk.has("choices")) {
+                                JsonArray choices = chunk.getAsJsonArray("choices");
+                                if (choices.size() > 0) {
+                                    JsonObject delta = choices.get(0).getAsJsonObject().getAsJsonObject("delta");
+                                    if (delta != null && delta.has("content")) {
+                                        String token = delta.get("content").getAsString();
+                                        fullText.append(token);
+                                        if (firstToken) {
+                                            LOGGER.info("[{}] First token received (TTFT)", providerId);
+                                            firstToken = false;
+                                        }
+                                        onToken.accept(token);
+                                    }
+                                }
+                            }
+                        } catch (Exception e) {
+                            LOGGER.warn("[{}] Failed to parse SSE chunk: {}", providerId, data);
+                        }
+                    }
+                }
+            }
+
+            String result = fullText.toString();
+            LOGGER.info("[{}] Streaming chat completion finished, total chars: {}", providerId, result.length());
+            onComplete.accept(result);
+        } catch (Exception e) {
+            onError.accept(e);
+        }
     }
 
     @Override

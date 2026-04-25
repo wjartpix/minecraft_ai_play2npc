@@ -17,8 +17,9 @@ public class ConversationHistory {
    private final List<JsonObject> conversationHistory = new ArrayList<>();
    private final Path historyFile;
    private boolean loadedFromFile = false;
-   private static final int MAX_HISTORY = 64;
-   private static final int SUMMARY_COUNT = 48;
+   private static final int MAX_HISTORY = 24;
+   private static final int SUMMARY_COUNT = 16;
+   private static final int TAIL_KEEP_COUNT = 8;
 
    public ConversationHistory(String initialSystemPrompt, String characterName, String characterShortName) {
       Path configDir = DirUtil.getConfigDir();
@@ -46,14 +47,15 @@ public class ConversationHistory {
 
    public void addHistory(JsonObject text, boolean doCutOff, Player2APIService player2apiService) {
       this.conversationHistory.add(text);
-      if (doCutOff && this.conversationHistory.size() > 64) {
-         List<JsonObject> toSummarize = new ArrayList<>(this.conversationHistory.subList(1, 49));
+      if (doCutOff && this.conversationHistory.size() > MAX_HISTORY) {
+         int summarizeEnd = this.conversationHistory.size() - TAIL_KEEP_COUNT;
+         List<JsonObject> toSummarize = new ArrayList<>(this.conversationHistory.subList(1, summarizeEnd));
          String summary = this.summarizeHistory(toSummarize, player2apiService);
          if (summary == "") {
             this.conversationHistory.remove(1);
          } else {
             JsonObject systemPrompt = this.conversationHistory.get(0);
-            int tailStart = this.conversationHistory.size() - 16;
+            int tailStart = this.conversationHistory.size() - TAIL_KEEP_COUNT;
             List<JsonObject> tail = new ArrayList<>(
                   this.conversationHistory.subList(tailStart, this.conversationHistory.size()));
             this.conversationHistory.clear();

@@ -101,24 +101,31 @@ public class AliyunSTTProvider {
             if (audioData.length > 44 && isWavHeader(audioData)) {
                 pcmData = new byte[audioData.length - 44];
                 System.arraycopy(audioData, 44, pcmData, 0, pcmData.length);
+                LOGGER.info("[AliyunSTT] Stripped 44-byte WAV header, PCM data size: {} bytes", pcmData.length);
+            } else {
+                LOGGER.info("[AliyunSTT] Using raw PCM data, size: {} bytes", pcmData.length);
             }
 
             // Send audio in chunks (~100ms each at 16kHz 16bit mono = 3200 bytes)
             int chunkSize = 3200;
             int offset = 0;
+            int chunkCount = 0;
             while (offset < pcmData.length) {
                 int len = Math.min(chunkSize, pcmData.length - offset);
                 ByteBuffer buffer = ByteBuffer.allocate(len);
                 buffer.put(pcmData, offset, len);
                 buffer.flip();
 
-                if (!translator.sendAudioFrame(buffer)) {
-                    LOGGER.info("[AliyunSTT] Sentence end detected, stopping audio send");
+                boolean sent = translator.sendAudioFrame(buffer);
+                chunkCount++;
+                if (!sent) {
+                    LOGGER.info("[AliyunSTT] Sentence end detected at chunk {}/{}, stopping audio send", chunkCount, (pcmData.length + chunkSize - 1) / chunkSize);
                     break;
                 }
                 offset += len;
                 Thread.sleep(20); // Rate-limit to avoid CPU overload
             }
+            LOGGER.info("[AliyunSTT] Sent {} audio chunks, total {} bytes", chunkCount, offset);
 
             // Signal end of audio
             translator.stop();

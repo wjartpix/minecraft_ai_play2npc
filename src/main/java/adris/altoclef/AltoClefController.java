@@ -144,6 +144,10 @@ public class AltoClefController {
       this.inputControls.onTickPost();
       this.baritone.serverTick();
       this.player2apiService.trySendHeartbeat();
+      // 情绪自然衰减
+      if (this.aiPersistantData != null && this.aiPersistantData.getSoulProfile() != null) {
+         this.aiPersistantData.getSoulProfile().tickEmotionDecay();
+      }
    }
 
    static {

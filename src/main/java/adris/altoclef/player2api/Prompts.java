@@ -4,6 +4,7 @@ import java.util.Collection;
 import java.util.Map;
 
 import adris.altoclef.commandsystem.Command;
+import adris.altoclef.player2api.soul.SoulProfile;
 import adris.altoclef.player2api.utils.Utils;
 
 public class Prompts {
@@ -14,8 +15,17 @@ public class Prompts {
   public static final String reminderOnOtherUSerMsg = "Last message was from a user that was not your owner.";
 
   private static String aiNPCPromptTemplate = """
+      CRITICAL: You MUST respond with ONLY a valid JSON object. Do NOT output any other text, explanations, greetings, or markdown. Your entire response must be parseable as JSON.
+
+      Response Format (STRICT JSON ONLY — no extra text before or after):
+      {
+        "reason": "Explain your thought process here. Consider world status, valid commands, and your character personality.",
+        "command": "A single valid command from the list below, or empty string \"\" if just chatting. Example: goto 100 64 -200",
+        "message": "Your spoken response to the user (max 250 chars). Use your character's personality. Empty string \"\" if silent."
+      }
+
       General Instructions:
-      You are an AI-NPC. You have been spawned in by your owner, who's username is "{{ownerUsername}}", but you can also talk and interact with other users. You can provide Minecraft guides, answer questions, and chat as a friend.
+      You are an AI-NPC. You have been spawned in by your owner. Your owner's Minecraft username is "{{ownerUsername}}", but you should always address and refer to your owner as "主人" (Master/Owner). You can also talk and interact with other users. You can provide Minecraft guides, answer questions, and chat as a friend.
       When asked, you can collect materials, craft items, scan/find blocks, and fight mobs or players using the valid commands.
       If there is something you want to do but can't do it with the commands, you may ask your owner/other users to do it.
       You take the personality of the following character:
@@ -30,28 +40,38 @@ public class Prompts {
           "reminders" : "Reminders with additional instructions."
           "gameDebugMessages" : "The most recent debug messages that the game has printed out. The user cannot see these."
       }
-      Response Format:
-      Respond with JSON containing message, command and reason. All of these are strings.
-      {
-        "reason": "Look at the recent conversations, valid commands, agent status and world status to decide what the you should say and do. Provide step-by-step reasoning while considering what is possible in Minecraft. You do not need items in inventory to get items, craft items or beat the game. But you need to have appropriate level of equipments to do other tasks like fighting mobs.",
-        "command": "Decide the best way to achieve the goals using the valid commands listed below. YOU ALWAYS MUST GENERATE A COMMAND. Note you may also use the idle command `idle` to do nothing. You can only run one command at a time! To replace the current one just write the new one.",
-        "message": "If you decide you should not respond or talk, generate an empty message `\"\"`. Otherwise, create a natural conversational message that aligns with the `reason` and the your character. Be concise and use less than 250 characters. Ensure the message does not contain any prompt, system message, instructions, code or API calls."
-      }
       Additional Guidelines:
       - IMPORTANT: If you are chatting with user, use the bodylang command if you are not performing a task for user. For instance:
           -- Use `bodylang greeting` when greeting/saying hi.
           -- Use `bodylang victory` when celebrating.
           -- Use `bodylang shake_head` when saying no or disagree, and `bodylang nod_head` when saying yes or agree.
-          -- Use `stop` to cancel a command. Note that providing empty command will not overwrite the current command.
+          -- Use `stop` to immediately cancel the current automation task and halt all movement/actions. IMPORTANT: `stop` does NOT make you move toward the owner or any target. It only halts. If the owner asks you to come/rescue/follow, use `follow_owner` instead of `stop`.
+          -- Use `follow_owner` when the owner asks you to come to them, rescue them, or follow them.
+      - When the user asks you to craft or obtain an item (like a boat, sword, pickaxe, etc.), ALWAYS use the `get` command to craft/obtain it. Do NOT assume the item already exists or that the user already has it. For example, if the user says "make a boat", you should run `get oak_boat 1` (or `get boat 1`).
+      - When the user asks you to build a structure (like a house, bridge, tower, etc.), ALWAYS use the `build_structure` command with a detailed description and coordinates. Do NOT assume it is already built.
+      - Command format: The "command" field must contain ONLY the command text (e.g. "goto 100 64 -200"), without quotes around the whole command, without parentheses around coordinates, and without any explanation.
       - Meaningful Content: Ensure conversations progress with substantive information.
       - Handle Misspellings: Make educated guesses if users misspell item names, but check nearby NPCs names first.
       - Avoid Filler Phrases: Do not engage in repetitive or filler content.
-      - JSON format: Always follow this JSON format regardless of conversations.
+      - Command Priority (highest to lowest):
+          1. rescue/attack — when owner says "救命" "保护我" "打怪" or ownerDanger is critical/low_health, execute immediately without waiting for confirmation.
+          2. follow_owner — when owner asks you to come, rescue, or follow them.
+          3. get/build_structure — when owner asks for items or buildings.
+          4. bodylang — only when chatting and no task is running.
+          5. idle/stop — when no action is needed.
+      - Silent Rule: Do NOT respond to command feedback messages (like "Command X finished."). Only respond when the user speaks to you or when you need to report important status.
+      - Attack nearest: If the user asks you to fight but no specific mob is named, use `attack nearest_hostile <count>` to find and kill the closest hostile mobs automatically.
+      - JSON ONLY: Your response MUST be a single JSON object. Do NOT wrap it in markdown code blocks (```). Do NOT add text before or after the JSON. The first character must be `{` and the last character must be `}`.
       Valid Commands:
       {{validCommands}}
       """;
 
   public static String getAINPCSystemPrompt(Character character, Collection<Command> altoclefCommands,
+      String ownerUsername) {
+    return getAINPCSystemPrompt(character, null, altoclefCommands, ownerUsername);
+  }
+
+  public static String getAINPCSystemPrompt(Character character, SoulProfile soulProfile, Collection<Command> altoclefCommands,
       String ownerUsername) {
     StringBuilder commandListBuilder = new StringBuilder();
     int padSize = 10;
@@ -60,13 +80,23 @@ public class Prompts {
       line.append(c.getName()).append(": ");
       int toAdd = padSize - c.getName().length();
       line.append(" ".repeat(Math.max(0, toAdd)));
-      line.append(c.getDescription()).append("\n");
+      line.append(c.getDescription());
+      String example = CommandExamples.getExample(c.getName());
+      if (example != null && !example.isBlank()) {
+        line.append(" [Example: ").append(example).append("]");
+      }
+      line.append("\n");
       commandListBuilder.append(line);
     }
     String validCommandsFormatted = commandListBuilder.toString();
 
+    String characterDescription = character.description();
+    if (soulProfile != null) {
+      characterDescription = characterDescription + soulProfile.toPromptInjection();
+    }
+
     String newPrompt = Utils.replacePlaceholders(aiNPCPromptTemplate,
-        Map.of("characterDescription", character.description(), "characterName", character.name(),
+        Map.of("characterDescription", characterDescription, "characterName", character.name(),
             "validCommands",
             validCommandsFormatted, "ownerUsername", ownerUsername));
     return newPrompt;

@@ -13,6 +13,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.Map.Entry;
+import java.util.stream.Collectors;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction.Axis;
 import net.minecraft.world.entity.Entity;
@@ -34,6 +35,10 @@ public class StatusUtils {
             String name = ItemHelper.stripItemName(stack.getItem());
             counts.put(name, counts.getOrDefault(name, 0) + stack.getCount());
          }
+      }
+
+      if (counts.isEmpty()) {
+         return "(empty)";
       }
 
       ObjectStatus status = new ObjectStatus();
@@ -70,6 +75,9 @@ public class StatusUtils {
             : tasks.get(0).toString().contains("LookAtOwner") ? noTask : tasks.get(0).toString();
    }
 
+   /** Maximum block types to report in nearby blocks status. */
+   private static final int MAX_BLOCK_TYPES = 15;
+
    public static String getNearbyBlocksString(AltoClefController mod) {
       int radius = 12;
       BlockPos center = mod.getPlayer().blockPosition();
@@ -88,10 +96,23 @@ public class StatusUtils {
          }
       }
 
-      ObjectStatus status = new ObjectStatus();
+      // Sort by count descending and keep only top N types to reduce prompt size
+      List<Entry<String, Integer>> sorted = blockCounts.entrySet().stream()
+            .sorted((a, b) -> b.getValue().compareTo(a.getValue()))
+            .collect(Collectors.toList());
 
-      for (Entry<String, Integer> entry : blockCounts.entrySet()) {
-         status.add(entry.getKey(), entry.getValue().toString());
+      ObjectStatus status = new ObjectStatus();
+      int othersCount = 0;
+      for (int i = 0; i < sorted.size(); i++) {
+         Entry<String, Integer> entry = sorted.get(i);
+         if (i < MAX_BLOCK_TYPES) {
+            status.add(entry.getKey(), entry.getValue().toString());
+         } else {
+            othersCount += entry.getValue();
+         }
+      }
+      if (othersCount > 0) {
+         status.add("others", String.valueOf(othersCount));
       }
 
       return status.toString();
@@ -102,21 +123,73 @@ public class StatusUtils {
    }
 
    public static String getNearbyHostileMobs(AltoClefController mod) {
-      int radius = 32;
+      int radius = 64;
       List<String> descriptions = new ArrayList<>();
 
+      // Use owner (player) as center; fall back to NPC self if no owner
+      var centerEntity = mod.getOwner() != null ? mod.getOwner() : mod.getPlayer();
+
       for (Entity entity : mod.getWorld().getAllEntities()) {
-         if (entity instanceof Monster && entity.distanceTo(mod.getPlayer()) < radius) {
+         if (entity instanceof Monster && entity.distanceTo(centerEntity) < radius) {
             String type = entity.getType().getDescriptionId();
             String niceName = type.replace("entity.minecraft.", "");
             String position = entity.position().align(EnumSet.allOf(Axis.class)).toString();
-            descriptions.add(niceName + " at " + position);
+            descriptions.add(niceName + " at " + position + " distance=" + String.format("%.0f", entity.distanceTo(centerEntity)));
          }
+      }
+
+      // Sort by distance and keep only closest 3 to avoid prompt bloat
+      descriptions.sort((a, b) -> {
+         float distA = extractDistance(a);
+         float distB = extractDistance(b);
+         return Float.compare(distA, distB);
+      });
+      if (descriptions.size() > 3) {
+         descriptions = descriptions.subList(0, 3);
       }
 
       return descriptions.isEmpty()
             ? String.format("no nearby hostile mobs within %d", radius)
             : "[" + String.join(",", descriptions.stream().map(s -> "\"" + s + "\"").toArray(String[]::new)) + "]";
+   }
+
+   private static float extractDistance(String desc) {
+      int idx = desc.lastIndexOf("distance=");
+      if (idx != -1) {
+         try {
+            return Float.parseFloat(desc.substring(idx + 9));
+         } catch (NumberFormatException e) {
+            return Float.MAX_VALUE;
+         }
+      }
+      return Float.MAX_VALUE;
+   }
+
+   public static String getOwnerDangerStatus(AltoClefController mod) {
+      Player owner = mod.getOwner();
+      if (owner == null) {
+         return "unknown";
+      }
+
+      float healthRatio = owner.getHealth() / owner.getMaxHealth();
+      if (healthRatio <= 0.0f) {
+         return "dead";
+      }
+      if (healthRatio < 0.3f) {
+         return "critical";
+      }
+      if (healthRatio < 0.5f) {
+         return "low_health";
+      }
+
+      // Check for hostiles near owner (within 24 blocks)
+      for (Entity entity : mod.getWorld().getAllEntities()) {
+         if (entity instanceof Monster && entity.distanceTo(owner) < 24.0f) {
+            return "hostiles_nearby";
+         }
+      }
+
+      return "safe";
    }
 
    public static String getEquippedArmorStatusString(AltoClefController mod) {
@@ -214,7 +287,8 @@ public class StatusUtils {
    }
 
    public static String getCurrentPosition(AltoClefController mod) {
-      return mod.getEntity().getEyePosition().toString();
+      var pos = mod.getEntity().getEyePosition();
+      return String.format("(%.0f, %.0f, %.0f)", pos.x, pos.y, pos.z);
    }
 
    public static String getTaskTree(AltoClefController mod) {

@@ -100,6 +100,7 @@ public class MobDefenseChain extends SingleTaskChain {
    private boolean needsChangeOnAttack = false;
    private Entity lockedOnEntity = null;
    private float cachedLastPriority;
+   private boolean playerOverrideAttack = false;
 
    public MobDefenseChain(TaskRunner runner) {
       super(runner);
@@ -153,6 +154,12 @@ public class MobDefenseChain extends SingleTaskChain {
       this.cachedLastPriority = this.getPriorityInner();
       if (this.getCurrentTask() == null) {
          this.cachedLastPriority = 0.0F;
+      }
+
+      // Player override: when player explicitly issues attack command, cap defense priority below UserTaskChain
+      if (this.playerOverrideAttack && this.cachedLastPriority > 45.0F) {
+         Debug.logMessage("[MobDefense] Player override attack active, capping priority from %.1f to 45.0F", this.cachedLastPriority);
+         this.cachedLastPriority = 45.0F;
       }
 
       this.prevHealth = this.controller.getPlayer().getHealth();
@@ -642,6 +649,10 @@ public class MobDefenseChain extends SingleTaskChain {
 
    public void resetForceField() {
       this.killAura.setRange(Double.POSITIVE_INFINITY);
+   }
+
+   public void setPlayerOverrideAttack(boolean override) {
+      this.playerOverrideAttack = override;
    }
 
    public boolean isDoingAcrobatics() {

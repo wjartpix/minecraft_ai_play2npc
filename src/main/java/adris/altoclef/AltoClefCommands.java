@@ -7,6 +7,7 @@ import adris.altoclef.commands.EquipCommand;
 import adris.altoclef.commands.FarmCommand;
 import adris.altoclef.commands.FishCommand;
 import adris.altoclef.commands.FollowCommand;
+import adris.altoclef.commands.FollowOwnerCommand;
 import adris.altoclef.commands.FoodCommand;
 import adris.altoclef.commands.GamerCommand;
 import adris.altoclef.commands.GetCommand;
@@ -16,6 +17,7 @@ import adris.altoclef.commands.HeroCommand;
 import adris.altoclef.commands.IdleCommand;
 import adris.altoclef.commands.LocateStructureCommand;
 import adris.altoclef.commands.MeatCommand;
+import adris.altoclef.commands.NPCMemoryCommand;
 import adris.altoclef.commands.ReloadSettingsCommand;
 import adris.altoclef.commands.ResetMemoryCommand;
 import adris.altoclef.commands.SetAIBridgeEnabledCommand;
@@ -42,8 +44,10 @@ public class AltoClefCommands {
                   new MeatCommand(),
                   new ReloadSettingsCommand(),
                   new ResetMemoryCommand(),
+                  new NPCMemoryCommand(),
                   new GamerCommand(),
                   new FollowCommand(),
+                  new FollowOwnerCommand(),
                   new GiveCommand(),
                   new ScanCommand(),
                   new AttackPlayerOrMobCommand(),

@@ -114,10 +114,10 @@ public class Player2HTTPUtils {
         // Field names must match CharacterUtils.parseCharacters() expectations:
         // name, short_name, greeting, description, voice_ids, meta.skin_url
         JsonObject defaultChar = new JsonObject();
-        defaultChar.addProperty("name", "AI Companion");
-        defaultChar.addProperty("short_name", "Companion");
-        defaultChar.addProperty("greeting", "Hello! I am your AI companion.");
-        defaultChar.addProperty("description", "A helpful AI companion powered by configurable LLM.");
+        defaultChar.addProperty("name", "琪琪");
+        defaultChar.addProperty("short_name", "琪琪");
+        defaultChar.addProperty("greeting", "你好呀！我是琪琪，很高兴见到主人！");
+        defaultChar.addProperty("description", "琪琪是主人贴心的AI伙伴，陪伴主人在Minecraft世界中冒险。");
         JsonArray voiceIds = new JsonArray();
         defaultChar.add("voice_ids", voiceIds);
         JsonObject meta = new JsonObject();

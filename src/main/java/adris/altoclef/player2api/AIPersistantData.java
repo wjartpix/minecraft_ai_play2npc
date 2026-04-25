@@ -5,6 +5,8 @@ import java.util.Optional;
 
 import adris.altoclef.AltoClefController;
 import adris.altoclef.player2api.Event.InfoMessage;
+import adris.altoclef.player2api.soul.SoulProfile;
+import adris.altoclef.player2api.soul.SoulProfileLoader;
 
 
 public class AIPersistantData {
@@ -14,12 +16,14 @@ public class AIPersistantData {
 
     private ConversationHistory conversationHistory;
     private Character character;
+    private SoulProfile soulProfile;
     private AltoClefController mod;
 
     public AIPersistantData(AltoClefController mod, Character character) {
         this.character = character;
         this.mod = mod;
-        String systemPrompt = Prompts.getAINPCSystemPrompt(character, mod.getCommandExecutor().allCommands(), mod.getOwnerUsername());
+        this.soulProfile = SoulProfileLoader.loadOrCreate(character.name());
+        String systemPrompt = Prompts.getAINPCSystemPrompt(character, this.soulProfile, mod.getCommandExecutor().allCommands(), mod.getOwnerUsername());
         this.conversationHistory = new ConversationHistory(systemPrompt, character.name(), character.shortName());
     }
 
@@ -56,8 +60,12 @@ public class AIPersistantData {
         return this.character;
     }
 
+    public SoulProfile getSoulProfile() {
+        return this.soulProfile;
+    }
+
     public void updateSystemPrompt(){
-        String systemPrompt = Prompts.getAINPCSystemPrompt(character, mod.getCommandExecutor().allCommands(), mod.getOwnerUsername());
+        String systemPrompt = Prompts.getAINPCSystemPrompt(character, this.soulProfile, mod.getCommandExecutor().allCommands(), mod.getOwnerUsername());
         conversationHistory.setBaseSystemPrompt(systemPrompt);
     }
 }

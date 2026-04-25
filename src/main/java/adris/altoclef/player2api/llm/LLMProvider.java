@@ -2,6 +2,7 @@ package adris.altoclef.player2api.llm;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
+import java.util.function.Consumer;
 
 /**
  * Unified LLM provider interface.
@@ -34,6 +35,27 @@ public interface LLMProvider {
             }
         }
         throw new Exception("Invalid response format from provider " + getProviderId() + ": " + response);
+    }
+
+    /**
+     * Streaming chat completion: tokens are delivered via callback as they arrive.
+     * Default implementation falls back to non-streaming chatCompletion and delivers
+     * the full result in one shot. Providers should override for true streaming.
+     *
+     * @param messages JSON array of {role, content} message objects
+     * @param onToken called for each token chunk as it arrives (first call signals TTFT)
+     * @param onComplete called with the full assistant message text when streaming finishes
+     * @param onError called if an error occurs during streaming
+     */
+    default void chatCompletionStream(JsonArray messages, Consumer<String> onToken,
+            Consumer<String> onComplete, Consumer<Exception> onError) throws Exception {
+        try {
+            String fullText = chatCompletionToString(messages);
+            onToken.accept(fullText);
+            onComplete.accept(fullText);
+        } catch (Exception e) {
+            onError.accept(e);
+        }
     }
 
     /** @return true if the provider is configured and reachable */

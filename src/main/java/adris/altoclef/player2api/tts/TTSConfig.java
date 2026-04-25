@@ -14,8 +14,8 @@ public class TTSConfig {
     private static final Logger LOGGER = LogManager.getLogger();
 
     // Defaults
-    private static final String DEFAULT_MODEL = "cosyvoice-v2";
-    private static final String DEFAULT_VOICE = "longxiaochun_v2";
+    private static final String DEFAULT_MODEL = "cosyvoice-v3-flash";
+    private static final String DEFAULT_VOICE = "longanhuan";
     private static final int DEFAULT_VOLUME = 50;
     private static final float DEFAULT_SPEECH_RATE = 1.0f;
     private static final float DEFAULT_PITCH_RATE = 1.0f;
