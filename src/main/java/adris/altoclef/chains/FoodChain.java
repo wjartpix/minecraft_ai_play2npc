@@ -4,19 +4,23 @@ import adris.altoclef.AltoClefController;
 import adris.altoclef.Settings;
 import adris.altoclef.multiversion.FoodComponentWrapper;
 import adris.altoclef.multiversion.item.ItemVer;
+import adris.altoclef.tasks.movement.PickupDroppedItemTask;
 import adris.altoclef.tasks.resources.CollectFoodTask;
 import adris.altoclef.tasks.speedrun.DragonBreathTracker;
 import adris.altoclef.tasksystem.TaskRunner;
 import adris.altoclef.util.ItemTarget;
 import adris.altoclef.util.helpers.ConfigHelper;
 import adris.altoclef.util.helpers.WorldHelper;
+import adris.altoclef.util.time.TimerGame;
 import baritone.api.utils.input.Input;
+import java.util.List;
 import java.util.Optional;
 import net.minecraft.core.BlockPos;
 import net.minecraft.util.Tuple;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.Item;
+import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 
@@ -29,6 +33,8 @@ public class FoodChain extends SingleTaskChain {
    private boolean needsToCollectFood = false;
    private Optional<Item> cachedPerfectFood = Optional.empty();
    private boolean shouldStop = false;
+   private ItemEntity targetFoodDrop = null;
+   private final TimerGame pickupTimeout = new TimerGame(5.0);
 
    public FoodChain(TaskRunner runner) {
       super(runner);
@@ -38,7 +44,11 @@ public class FoodChain extends SingleTaskChain {
    protected void onTaskFinish(AltoClefController controller) {
    }
 
-   private void startEat(AltoClefController controller, Item food) {
+      public void requestEat() {
+         this.requestFillup = true;
+      }
+   
+      private void startEat(AltoClefController controller, Item food) {
       controller.getSlotHandler().forceEquipItem(new ItemTarget(food), true);
       controller.getBaritone().getInputOverrideHandler().setInputForceState(Input.CLICK_RIGHT, true);
       controller.getExtraBaritoneSettings().setInteractionPaused(true);
@@ -84,6 +94,33 @@ public class FoodChain extends SingleTaskChain {
 
          if (this.controller.getModSettings().isAutoEat() && !this.controller.getEntity().isInLava() && !this.shouldStop) {
             if (this.controller.getMLGBucketChain().doneMLG() && !this.controller.getMLGBucketChain().isFalling(this.controller)) {
+               if (!(this.mainTask instanceof CollectFoodTask)) {
+                  if (this.mainTask instanceof PickupDroppedItemTask) {
+                     if (this.pickupTimeout.elapsed()) {
+                        this.setTask(null);
+                        this.targetFoodDrop = null;
+                     } else if (this.targetFoodDrop != null && !this.targetFoodDrop.isAlive()) {
+                        this.setTask(null);
+                        this.targetFoodDrop = null;
+                     } else {
+                        return 56.0F;
+                     }
+                  }
+
+                  int foodLevel = this.controller.getBaritone().getEntityContext().hungerManager().getFoodLevel();
+                  float health = this.controller.getEntity().getHealth();
+                  if (foodLevel < 20 || health < this.controller.getEntity().getMaxHealth()) {
+                     Optional<ItemEntity> nearbyFood = this.findNearbyDroppedFood(this.controller);
+                     if (nearbyFood.isPresent()) {
+                        Item foodItem = nearbyFood.get().getItem().getItem();
+                        this.targetFoodDrop = nearbyFood.get();
+                        this.pickupTimeout.reset();
+                        this.setTask(new PickupDroppedItemTask(foodItem, 1));
+                        return 56.0F;
+                     }
+                  }
+               }
+
                Tuple<Integer, Optional<Item>> calculation = this.calculateFood(this.controller);
                int foodScore = (Integer)calculation.getA();
                this.cachedPerfectFood = (Optional<Item>)calculation.getB();
@@ -122,6 +159,11 @@ public class FoodChain extends SingleTaskChain {
             return Float.NEGATIVE_INFINITY;
          }
       }
+   }
+
+   @Override
+   public boolean isActive() {
+      return true;
    }
 
    @Override
@@ -199,6 +241,33 @@ public class FoodChain extends SingleTaskChain {
       }
 
       return new Tuple(foodTotal, Optional.ofNullable(bestFood));
+   }
+
+   private Optional<ItemEntity> findNearbyDroppedFood(AltoClefController controller) {
+      List<ItemEntity> drops = controller.getEntityTracker().getDroppedItems();
+      ItemEntity best = null;
+      double bestDist = Double.POSITIVE_INFINITY;
+
+      for (ItemEntity drop : drops) {
+         if (!drop.isAlive()) {
+            continue;
+         }
+
+         double distSqr = drop.distanceToSqr(controller.getPlayer());
+         if (distSqr > 25.0) {
+            continue;
+         }
+
+         ItemStack stack = drop.getItem();
+         if (ItemVer.isFood(stack) && !stack.is(Items.SPIDER_EYE)) {
+            if (distSqr < bestDist) {
+               bestDist = distSqr;
+               best = drop;
+            }
+         }
+      }
+
+      return Optional.ofNullable(best);
    }
 
    public boolean hasFood() {

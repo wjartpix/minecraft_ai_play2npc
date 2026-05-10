@@ -5,10 +5,12 @@ import adris.altoclef.TaskCatalogue;
 import adris.altoclef.multiversion.item.ItemVer;
 import adris.altoclef.tasks.CraftInInventoryTask;
 import adris.altoclef.tasks.container.CraftInTableTask;
+import adris.altoclef.tasks.container.PickupFromContainerTask;
 import adris.altoclef.tasks.container.SmeltInSmokerTask;
 import adris.altoclef.tasks.movement.PickupDroppedItemTask;
 import adris.altoclef.tasks.movement.TimeoutWanderTask;
 import adris.altoclef.tasksystem.Task;
+import adris.altoclef.trackers.storage.ContainerCache;
 import adris.altoclef.util.CraftingRecipe;
 import adris.altoclef.util.ItemTarget;
 import adris.altoclef.util.MiningRequirement;
@@ -20,6 +22,7 @@ import java.util.Arrays;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Predicate;
+import java.util.stream.Stream;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
@@ -52,6 +55,7 @@ public class CollectFoodTask extends Task {
    private final double unitsNeeded;
    private final TimerGame checkNewOptionsTimer = new TimerGame(10.0);
    private Task currentResourceTask = null;
+   private Task containerPickupTask = null;
 
    public CollectFoodTask(double unitsNeeded) {
       this.unitsNeeded = unitsNeeded;
@@ -68,6 +72,21 @@ public class CollectFoodTask extends Task {
    protected Task onTick() {
       blackListChickenJockeys(this.controller);
       blacklistPillagerHayBales(this.controller);
+      
+      // Phase 1: Search nearby containers for food items (cooked or raw)
+      if (this.containerPickupTask != null && this.containerPickupTask.isActive() && !this.containerPickupTask.isFinished()) {
+         this.setDebugState("Picking up food from container");
+         return this.containerPickupTask;
+      }
+      
+      Optional<ContainerCache> foodContainer = this.findNearestContainerWithFood(this.controller);
+      if (foodContainer.isPresent()) {
+         this.setDebugState("Found food in container at " + foodContainer.get().getBlockPos().toShortString());
+         ItemTarget[] foodTargets = this.getAllFoodItemTargets();
+         this.containerPickupTask = new PickupFromContainerTask(foodContainer.get().getBlockPos(), foodTargets);
+         return this.containerPickupTask;
+      }
+      
       SmeltTarget toSmelt = this.getBestSmeltTarget(this.controller);
       if (toSmelt != null) {
          this.setDebugState("Smelting food");
@@ -241,6 +260,30 @@ public class CollectFoodTask extends Task {
 
       int potentialBread = mod.getItemStorage().getItemCount(Items.WHEAT) / 3 + mod.getItemStorage().getItemCount(Items.HAY_BLOCK) * 3;
       return potentialFood + Objects.requireNonNull(ItemVer.getFoodComponent(Items.BREAD)).getHunger() * potentialBread;
+   }
+
+   private Optional<ContainerCache> findNearestContainerWithFood(AltoClefController controller) {
+      Item[] allFoodItems = this.getAllFoodItems();
+      Optional<ContainerCache> closest = controller.getItemStorage().getClosestContainerWithItem(controller.getPlayer().position(), allFoodItems);
+      if (closest.isPresent()) {
+         double range = controller.getModSettings().getResourceChestLocateRange();
+         if (closest.get().getBlockPos().closerToCenterThan(controller.getPlayer().position(), range)) {
+            return closest;
+         }
+      }
+      return Optional.empty();
+   }
+
+   private Item[] getAllFoodItems() {
+      return Stream.concat(
+         Arrays.stream(ITEMS_TO_PICK_UP),
+         Arrays.stream(COOKABLE_FOODS).flatMap(cookable -> Stream.of(cookable.getRaw(), cookable.getCooked()))
+      ).toArray(Item[]::new);
+   }
+
+   private ItemTarget[] getAllFoodItemTargets() {
+      Item[] allFoods = this.getAllFoodItems();
+      return new ItemTarget[]{new ItemTarget(allFoods, (int) Math.ceil(this.unitsNeeded))};
    }
 
    public static class CookableFoodTarget {

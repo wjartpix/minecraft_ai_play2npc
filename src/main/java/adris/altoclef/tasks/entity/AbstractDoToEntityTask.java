@@ -89,7 +89,9 @@ public abstract class AbstractDoToEntityTask extends Task implements ITaskRequir
          }
 
          double maintainDistance = this.maintainDistance >= 0.0 ? this.maintainDistance : playerReach - 1.0;
-         boolean tooClose = sqDist < maintainDistance * maintainDistance;
+         // Only apply tooClose/GoalRunAway when maintainDistance is explicitly set (>= 0).
+         // For combat tasks (maintainDistance < 0 / auto-calculated), the NPC should stay close to attack.
+         boolean tooClose = this.maintainDistance >= 0.0 && sqDist < maintainDistance * maintainDistance;
          if (tooClose && !mod.getBaritone().getCustomGoalProcess().isActive()) {
             mod.getBaritone().getCustomGoalProcess().setGoalAndPath(new GoalRunAway(maintainDistance, entity.blockPosition()));
          }
@@ -105,7 +107,21 @@ public abstract class AbstractDoToEntityTask extends Task implements ITaskRequir
          if (canAttack && !isBusyWithHigherPriority) {
             LOGGER.debug("[Attack] Entity interact: target={} inRange=true", entity.getType().toShortString());
             this.progress.reset();
-            return this.onEntityInteract(mod, entity);
+            Task interactResult = this.onEntityInteract(mod, entity);
+            if (interactResult != null) {
+               return interactResult;
+            }
+            // For non-combat tasks (maintainDistance >= 0), return null to let GoalRunAway handle positioning
+            if (this.maintainDistance >= 0.0) {
+               return null;
+            }
+            // For combat tasks (maintainDistance < 0): DON'T return null!
+            // Continue returning GetToEntityTask to keep baritone tracking the target.
+            // Returning null here would stop the approach sub-task ("interrupted by null"),
+            // cancel the baritone path, and force a full path recalculation on the next tick
+            // when the target moves slightly out of range — causing an infinite stop/restart loop.
+            this.setDebugState("Attacking target");
+            return new GetToEntityTask(entity, maintainDistance);
          }
 
          if (!tooClose) {

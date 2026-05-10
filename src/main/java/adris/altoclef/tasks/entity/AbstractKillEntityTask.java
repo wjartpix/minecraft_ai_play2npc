@@ -2,7 +2,6 @@ package adris.altoclef.tasks.entity;
 
 import adris.altoclef.AltoClefController;
 import adris.altoclef.chains.MobDefenseChain;
-import adris.altoclef.mixins.LivingEntityMixin;
 import adris.altoclef.tasksystem.Task;
 import adris.altoclef.util.helpers.LookHelper;
 import adris.altoclef.util.helpers.StorageHelper;
@@ -10,9 +9,7 @@ import adris.altoclef.util.slots.PlayerSlot;
 import java.util.List;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.TieredItem;
@@ -21,6 +18,8 @@ public abstract class AbstractKillEntityTask extends AbstractDoToEntityTask {
    private static final Logger LOGGER = LogManager.getLogger();
    private static final double OTHER_FORCE_FIELD_RANGE = 2.0;
    private static final double CONSIDER_COMBAT_RANGE = 10.0;
+   private static final int ATTACK_COOLDOWN_TICKS = 5;
+   private int lastAttackTick = -100; // Allow immediate first attack
 
    protected AbstractKillEntityTask() {
       this(10.0, 2.0);
@@ -78,23 +77,20 @@ public abstract class AbstractKillEntityTask extends AbstractDoToEntityTask {
          LOGGER.debug("[Attack] Equipping weapon, deferring attack on {}", entity.getType().toShortString());
          return null;
       }
-      float hitProg = this.getAttackCooldownProgress(mod.getPlayer(), 0.0F);
-      if (hitProg >= 1.0F) {
-         LOGGER.info("[Attack] Attacking entity: {} (cooldown={})", entity.getType().toShortString(), hitProg);
+      // Use tickCount-based cooldown instead of attackStrengthTicker.
+      // attackStrengthTicker is only incremented in Player.tick(), but AutomatoneEntity
+      // extends LivingEntity (not Player), so the field is never incremented and the
+      // vanilla cooldown check always returns 0 — preventing attacks entirely.
+      int currentTick = mod.getPlayer().tickCount;
+      if (currentTick - this.lastAttackTick >= ATTACK_COOLDOWN_TICKS) {
+         // LOGGER.info("[Attack] Attacking entity: {} (tickCooldown={})", entity.getType().toShortString(), currentTick - this.lastAttackTick);
          LookHelper.lookAt(mod, entity.getEyePosition());
          mod.getControllerExtras().attack(entity);
+         this.lastAttackTick = currentTick;
       } else {
-         LOGGER.debug("[Attack] Attack on cooldown for {}: {}", entity.getType().toShortString(), hitProg);
+         LOGGER.debug("[Attack] Attack on cooldown for {}: {} ticks remaining", entity.getType().toShortString(), ATTACK_COOLDOWN_TICKS - (currentTick - this.lastAttackTick));
       }
 
       return null;
-   }
-
-   public float getAttackCooldownProgressPerTick(LivingEntity entity) {
-      return 5.0F;
-   }
-
-   public float getAttackCooldownProgress(LivingEntity entity, float baseTime) {
-      return Mth.clamp((((LivingEntityMixin)entity).getLastAttackedTicks() + baseTime) / this.getAttackCooldownProgressPerTick(entity), 0.0F, 1.0F);
    }
 }

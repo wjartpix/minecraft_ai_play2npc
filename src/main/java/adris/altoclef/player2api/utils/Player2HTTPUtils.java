@@ -98,8 +98,12 @@ public class Player2HTTPUtils {
             throw new Exception("Request body must contain 'messages' array");
         }
 
+        LOGGER.info(">>> llm request {} ", messages.toString());
+
         JsonObject response = provider.chatCompletion(messages);
 
+        LOGGER.info(">>> llm response {} ", response.toString());
+        
         Map<String, JsonElement> result = new HashMap<>();
         for (Map.Entry<String, JsonElement> entry : response.entrySet()) {
             result.put(entry.getKey(), entry.getValue());

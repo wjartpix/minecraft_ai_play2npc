@@ -91,7 +91,7 @@ public class SoulProfileLoader {
 
             // memoryAnchors
             JsonArray anchorsJson = new JsonArray();
-            for (MemoryAnchor anchor : profile.getMemoryAnchors()) {
+            for (MemoryAnchor anchor : profile.getLayeredMemory().getAllMemories()) {
                 JsonObject a = new JsonObject();
                 a.addProperty("id", anchor.id());
                 a.addProperty("content", anchor.content());
@@ -100,6 +100,8 @@ public class SoulProfileLoader {
                 a.addProperty("timestamp", anchor.timestamp());
                 a.addProperty("permanent", anchor.permanent());
                 a.addProperty("relatedPlayer", anchor.relatedPlayer());
+                a.addProperty("referenceCount", anchor.getReferenceCount());
+                a.addProperty("lastUsedTimestamp", anchor.lastUsedTimestamp());
                 anchorsJson.add(a);
             }
             json.add("memoryAnchors", anchorsJson);
@@ -178,14 +180,19 @@ public class SoulProfileLoader {
                 JsonArray anchorsJson = json.getAsJsonArray("memoryAnchors");
                 for (JsonElement e : anchorsJson) {
                     JsonObject a = e.getAsJsonObject();
+                    long timestamp = a.get("timestamp").getAsLong();
+                    int referenceCount = a.has("referenceCount") ? a.get("referenceCount").getAsInt() : 0;
+                    long lastUsedTimestamp = a.has("lastUsedTimestamp") ? a.get("lastUsedTimestamp").getAsLong() : timestamp;
                     anchors.add(new MemoryAnchor(
                         a.get("id").getAsString(),
                         a.get("content").getAsString(),
                         a.get("category").getAsString(),
                         a.get("emotionalWeight").getAsFloat(),
-                        a.get("timestamp").getAsLong(),
+                        timestamp,
                         a.get("permanent").getAsBoolean(),
-                        a.get("relatedPlayer").getAsString()
+                        a.get("relatedPlayer").getAsString(),
+                        referenceCount,
+                        lastUsedTimestamp
                     ));
                 }
             }
@@ -206,7 +213,9 @@ public class SoulProfileLoader {
                 }
             }
 
-            return new SoulProfile(characterName, persona, emotions, behavior, anchors, relationships);
+            SoulProfile profile = new SoulProfile(characterName, persona, emotions, behavior, anchors, relationships);
+            profile.getLayeredMemory(); // ensure layered memory system is properly initialized
+            return profile;
         }
     }
 

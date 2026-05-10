@@ -4,6 +4,7 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 
+import adris.altoclef.player2api.memory.LayeredMemorySystem;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -24,6 +25,9 @@ public class SoulProfile {
     // 记忆锚点列表
     private final List<MemoryAnchor> memoryAnchors = new CopyOnWriteArrayList<>();
 
+    // 分层记忆系统
+    private final LayeredMemorySystem layeredMemory;
+
     // 关系图谱 (key = 目标玩家UUID字符串)
     private final Map<String, Relationship> relationships = new ConcurrentHashMap<>();
 
@@ -35,6 +39,7 @@ public class SoulProfile {
         this.persona = persona != null ? persona : new PersonaMatrix();
         this.emotions = new EmotionState();
         this.behavior = BehaviorSignature.deriveFromPersona(this.persona);
+        this.layeredMemory = new LayeredMemorySystem();
         this.lastEmotionDecayTime = System.currentTimeMillis();
     }
 
@@ -51,6 +56,10 @@ public class SoulProfile {
         if (relationships != null) {
             this.relationships.putAll(relationships);
         }
+        this.layeredMemory = new LayeredMemorySystem();
+        for (MemoryAnchor anchor : this.memoryAnchors) {
+            this.layeredMemory.addMemory(anchor);
+        }
         this.lastEmotionDecayTime = System.currentTimeMillis();
     }
 
@@ -62,12 +71,18 @@ public class SoulProfile {
     public BehaviorSignature getBehavior() { return behavior; }
     public List<MemoryAnchor> getMemoryAnchors() { return new ArrayList<>(memoryAnchors); }
     public Map<String, Relationship> getRelationships() { return new HashMap<>(relationships); }
+    public LayeredMemorySystem getLayeredMemory() { return layeredMemory; }
+
+    public List<MemoryAnchor> getActiveMemories(String context, int maxCount) {
+        return layeredMemory.selectForPrompt(context, maxCount);
+    }
 
     // ========== Memory Anchors ==========
 
     public void addMemoryAnchor(MemoryAnchor anchor) {
         if (anchor == null) return;
         memoryAnchors.add(anchor);
+        layeredMemory.addMemory(anchor);
         if (memoryAnchors.size() > MAX_MEMORY_ANCHORS) {
             cleanupOldAnchors();
         }
@@ -155,6 +170,43 @@ public class SoulProfile {
 
         sb.append(behavior.toPromptText()).append("\n");
         sb.append("======================\n");
+        return sb.toString();
+    }
+
+    /**
+     * 紧凑版灵魂信息注入（~150 tokens vs 原版 ~350-700 tokens）
+     * 用于 Context 压缩场景
+     */
+    public String toCompactPromptInjection() {
+        StringBuilder sb = new StringBuilder();
+        sb.append("\n[Soul] ");
+
+        // 人格：紧凑五维度表示
+        sb.append("Persona: ").append(persona.toCompactText()).append("; ");
+
+        // 情绪：仅主导情绪
+        if (emotions.hasSignificantEmotion()) {
+            sb.append("Mood: ").append(emotions.getDominantEmotion())
+              .append("(").append((int)(emotions.getDominantIntensity() * 100)).append("%); ");
+        }
+
+        // 记忆锚点：Top-3（vs 原版 Top-5）
+        List<MemoryAnchor> topAnchors = getTopMemoryAnchors(3);
+        if (!topAnchors.isEmpty()) {
+            sb.append("Memories: ");
+            for (MemoryAnchor a : topAnchors) {
+                sb.append(a.content()).append("; ");
+            }
+        }
+
+        // 关系：一行表示
+        if (!relationships.isEmpty()) {
+            Relationship rel = relationships.values().iterator().next();
+            sb.append("Bond(").append(rel.targetName()).append("): ")
+              .append(rel.intimacy()).append("/100");
+        }
+
+        sb.append("\n");
         return sb.toString();
     }
 

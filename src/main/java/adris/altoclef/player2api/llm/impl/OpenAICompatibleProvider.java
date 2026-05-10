@@ -75,6 +75,9 @@ public class OpenAICompatibleProvider implements LLMProvider {
 
         LOGGER.info("[{}] Sending chat completion request to {} with model {} (stream={})",
                 providerId, endpoint, model, stream);
+        // 打印请求体JSON（截断到2000字符避免日志过长）
+        // String logRequestJson = requestJson.length() > 2000 ? requestJson.substring(0, 2000) + "... (truncated)" : requestJson;
+        LOGGER.info("[{}] Request body: {}", providerId, requestJson);
 
         // Set up connection
         URL url = new URL(endpoint);
@@ -96,7 +99,7 @@ public class OpenAICompatibleProvider implements LLMProvider {
         }
         conn.setDoOutput(true);
         conn.setConnectTimeout(30000);
-        conn.setReadTimeout(120000);
+        conn.setReadTimeout(30000);
 
         // Send request
         try (OutputStream os = conn.getOutputStream()) {
@@ -128,8 +131,12 @@ public class OpenAICompatibleProvider implements LLMProvider {
             throw new Exception("LLM API error (HTTP " + statusCode + "): " + sb);
         }
 
-        JsonObject response = GSON.fromJson(sb.toString(), JsonObject.class);
         LOGGER.info("[{}] Chat completion successful", providerId);
+
+        LOGGER.info(">>> llm [{}] request {} ", providerId, messages.toString());
+        JsonObject response = GSON.fromJson(sb.toString(), JsonObject.class);
+        LOGGER.info("<<< llm [{}] response {}", providerId, response.toString());
+
         return response;
     }
 
@@ -192,8 +199,10 @@ public class OpenAICompatibleProvider implements LLMProvider {
             }
 
             String result = fullText.toString();
-            LOGGER.info("[{}] Streaming chat completion finished, total chars: {}", providerId, result.length());
+            LOGGER.info("[{}] Streaming chat completion finished, total chars: {}, llm response:{} ", providerId, result.length(), fullText.toString());
             onComplete.accept(result);
+
+
         } catch (Exception e) {
             onError.accept(e);
         }

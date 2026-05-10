@@ -12,7 +12,7 @@ import java.util.Objects;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Vec3i;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.level.block.entity.RandomizableContainerBlockEntity;
+import net.minecraft.world.Container;
 
 public class PickupFromContainerTask extends Task {
    private final BlockPos containerPos;
@@ -39,11 +39,11 @@ public class PickupFromContainerTask extends Task {
             4.5
          )) {
          return new GetToBlockTask(this.containerPos);
-      } else if (!(this.controller.getWorld().getBlockEntity(this.containerPos) instanceof RandomizableContainerBlockEntity container)) {
-         Debug.logWarning("Block at " + this.containerPos + " is not a lootable container. Stopping.");
+      } else if (!(this.controller.getWorld().getBlockEntity(this.containerPos) instanceof Container container)) {
+         Debug.logWarning("Block at " + this.containerPos + " is not a container. Stopping.");
          return null;
       } else {
-         RandomizableContainerBlockEntity containerInventory = container;
+         Container containerInventory = container;
          LivingEntityInventory playerInventory = ((IInventoryProvider)this.controller.getEntity()).getLivingInventory();
 
          for (ItemTarget target : this.targets) {

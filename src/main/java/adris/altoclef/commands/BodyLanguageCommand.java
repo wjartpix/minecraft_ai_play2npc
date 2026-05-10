@@ -10,7 +10,7 @@ import adris.altoclef.tasks.movement.BodyLanguageTask;
 public class BodyLanguageCommand extends Command {
     public BodyLanguageCommand() throws CommandException {
         super("bodylang",
-                "Perform some sort of dance/body language action. Action must be either `greeting`, `nod_head`, `shake_head`, `victory` ",
+                "Perform some sort of dance/body language action. Action must be either `greeting`, `nod_head`, `shake_head`, `victory`, `sit`, `wave`, `dance`, `bow`, `spin` ",
                 new Arg<>(String.class, "bodyLanguage"));
     }
 

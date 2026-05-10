@@ -85,7 +85,24 @@ public class AttackPlayerOrMobCommand extends Command {
             String resolvedToKill = resolveEntityName(toKill);
             return name != null && name.equalsIgnoreCase(resolvedToKill);
          };
-         this.killTask = new KillEntitiesTask(this.shouldAttackPredicate);
+
+         // For nearest_hostile: search from owner's position so NPC goes to protect the player
+         if ("nearest_hostile".equalsIgnoreCase(toKill)) {
+            this.killTask = new KillEntitiesTask(this.shouldAttackPredicate, () -> {
+               if (this.controller != null && this.controller.getOwner() != null) {
+                  return this.controller.getOwner().position();
+               }
+               // Fallback to NPC's own position if no owner
+               return this.controller != null ? this.controller.getPlayer().position() : null;
+            });
+         } else {
+            this.killTask = new KillEntitiesTask(this.shouldAttackPredicate, () -> {
+               if (this.controller != null && this.controller.getOwner() != null) {
+                  return this.controller.getOwner().position();
+               }
+               return this.controller != null ? this.controller.getPlayer().position() : null;
+            });
+         }
       }
 
       private String resolveEntityName(String input) {

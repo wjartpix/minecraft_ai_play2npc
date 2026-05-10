@@ -24,6 +24,7 @@ import adris.altoclef.tasks.resources.CollectHayBlockTask;
 import adris.altoclef.tasks.resources.CollectHoneycombTask;
 import adris.altoclef.tasks.resources.CollectIronIngotTask;
 import adris.altoclef.tasks.resources.CollectMagmaCreamTask;
+import adris.altoclef.tasks.resources.CollectMeatTask;
 import adris.altoclef.tasks.resources.CollectMilkTask;
 import adris.altoclef.tasks.resources.CollectNetherBricksTask;
 import adris.altoclef.tasks.resources.CollectObsidianTask;
@@ -960,6 +961,7 @@ public class TaskCatalogue {
       mobCook("rabbit", Items.RABBIT, Items.COOKED_RABBIT, Rabbit.class);
       mobCook("salmon", Items.SALMON, Items.COOKED_SALMON, Salmon.class);
       mobCook("cod", Items.COD, Items.COOKED_COD, Cod.class);
+      simple("meat", new Item[]{Items.COOKED_PORKCHOP, Items.COOKED_BEEF, Items.COOKED_CHICKEN, Items.COOKED_MUTTON, Items.COOKED_RABBIT}, count -> new CollectMeatTask(count));
       simple("milk", Items.MILK_BUCKET, CollectMilkTask::new);
       mine("apple", Blocks.OAK_LEAVES, Items.APPLE);
       smelt("baked_potato", Items.BAKED_POTATO, "potato");
@@ -1013,6 +1015,7 @@ public class TaskCatalogue {
 
       public ResourceTask getResource(int count) {
          ResourceTask result = this.getResource.apply(count);
+         result.withContainers(true);
          if (this.mineIfPresent) {
             result = result.mineIfPresent(ItemHelper.itemsToBlocks(this.targets));
          }

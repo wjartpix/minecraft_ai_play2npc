@@ -45,8 +45,9 @@ public class Settings implements IFailableConfigFile {
    private float resourcePickupDropRange = 16.0F;
    private int minimumFoodAllowed = 0;
    private int foodUnitsToCollect = 0;
-   private float resourceChestLocateRange = 500.0F;
-   private float resourceMineRange = 100.0F;
+   private float resourceChestLocateRange = 80.0F;
+   private float resourceMineRange = 50.0F;
+   private boolean prioritizeContainerResources = true;
    private boolean avoidSearchingDungeonChests = true;
    private boolean avoidOceanBlocks = false;
    private float entityReachRange = 4.0F;
@@ -187,6 +188,10 @@ public class Settings implements IFailableConfigFile {
 
    public float getResourceMineRange() {
       return this.resourceMineRange;
+   }
+
+   public boolean shouldPrioritizeContainerResources() {
+      return this.prioritizeContainerResources;
    }
 
    public float getContainerItemMoveDelay() {

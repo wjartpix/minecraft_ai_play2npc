@@ -70,6 +70,18 @@ public class LLMConfig {
             if (root.has("stt")) {
                 this.sttConfig = root.getAsJsonObject("stt");
             }
+            if (this.providers != null) {
+                for (String key : this.providers.keySet()) {
+                    if (!this.providers.get(key).isJsonObject()) continue;
+                    JsonObject providerConf = this.providers.getAsJsonObject(key);
+                    if (providerConf != null && providerConf.has("maxTokens")) {
+                        int maxTokens = providerConf.get("maxTokens").getAsInt();
+                        if (maxTokens < 256) {
+                            LOGGER.warn("Provider '{}' maxTokens={} may be too small for full JSON responses", key, maxTokens);
+                        }
+                    }
+                }
+            }
             LOGGER.info("LLM config loaded from {}. Active provider: {}", configPath, activeProvider);
         } catch (Exception e) {
             LOGGER.error("Failed to load LLM config from {}", configPath, e);
@@ -79,7 +91,7 @@ public class LLMConfig {
     public String getActiveProvider() { return activeProvider; }
 
     public JsonObject getProviderConfig(String providerId) {
-        if (providers.has(providerId)) {
+        if (providers.has(providerId) && providers.get(providerId).isJsonObject()) {
             return providers.getAsJsonObject(providerId);
         }
         return new JsonObject();

@@ -10,6 +10,7 @@ import adris.altoclef.commandsystem.ItemList;
 import adris.altoclef.player2api.AgentCommandUtils;
 import adris.altoclef.tasksystem.Task;
 import adris.altoclef.tasks.entity.GiveItemToPlayerTask;
+import adris.altoclef.tasks.resources.CollectFoodForOwnerTask;
 import adris.altoclef.util.ItemTarget;
 
 public class GetCommand extends Command {
@@ -39,6 +40,16 @@ public class GetCommand extends Command {
             String ownerName = mod.getOwner().getName().getString();
             mod.runUserTask(new GiveItemToPlayerTask(ownerName, items), () -> this.finish());
             return;
+         }
+
+         // Special handling for meat/food: use CollectFoodForOwnerTask which includes delivery
+         if (items.length == 1 && items[0].isCatalogueItem()) {
+            String catName = items[0].getCatalogueName();
+            if ("meat".equals(catName) || "food".equals(catName)) {
+               int count = items[0].getTargetCount();
+               mod.runUserTask(new CollectFoodForOwnerTask(count), () -> this.finish());
+               return;
+            }
          }
 
          Task targetTask;

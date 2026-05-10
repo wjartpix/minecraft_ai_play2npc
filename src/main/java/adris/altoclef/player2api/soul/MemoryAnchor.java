@@ -9,10 +9,12 @@ public class MemoryAnchor {
     private final String id;
     private final String content;
     private final String category;      // event / preference / relationship / trauma
-    private final float emotionalWeight; // 0.0 ~ 1.0
+    private float emotionalWeight;       // 0.0 ~ 1.0
     private final long timestamp;
     private final boolean permanent;
     private final String relatedPlayer;
+    private int referenceCount = 0;      // 被引用次数
+    private long lastUsedTimestamp;      // 最后使用时间
 
     public MemoryAnchor(String content, String category, float emotionalWeight, String relatedPlayer) {
         this.id = UUID.randomUUID().toString();
@@ -22,6 +24,7 @@ public class MemoryAnchor {
         this.timestamp = System.currentTimeMillis();
         this.permanent = false;
         this.relatedPlayer = relatedPlayer != null ? relatedPlayer : "";
+        this.lastUsedTimestamp = this.timestamp;
     }
 
     public MemoryAnchor(String id, String content, String category, float emotionalWeight,
@@ -33,6 +36,15 @@ public class MemoryAnchor {
         this.timestamp = timestamp;
         this.permanent = permanent;
         this.relatedPlayer = relatedPlayer != null ? relatedPlayer : "";
+        this.lastUsedTimestamp = timestamp;
+    }
+
+    public MemoryAnchor(String id, String content, String category, float emotionalWeight,
+                        long timestamp, boolean permanent, String relatedPlayer,
+                        int referenceCount, long lastUsedTimestamp) {
+        this(id, content, category, emotionalWeight, timestamp, permanent, relatedPlayer);
+        this.referenceCount = referenceCount;
+        this.lastUsedTimestamp = lastUsedTimestamp;
     }
 
     public String id() { return id; }
@@ -42,6 +54,16 @@ public class MemoryAnchor {
     public long timestamp() { return timestamp; }
     public boolean permanent() { return permanent; }
     public String relatedPlayer() { return relatedPlayer; }
+    public int getReferenceCount() { return referenceCount; }
+    public long lastUsedTimestamp() { return lastUsedTimestamp; }
+
+    public void incrementReferenceCount() { this.referenceCount++; }
+
+    public void refreshTimestamp() { this.lastUsedTimestamp = System.currentTimeMillis(); }
+
+    public void reinforceEmotionalWeight(float boost) {
+        this.emotionalWeight = Math.min(1.0f, this.emotionalWeight + boost);
+    }
 
     /**
      * 计算记忆评分（情感权重 × 时效性）。

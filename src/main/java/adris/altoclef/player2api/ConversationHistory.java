@@ -51,21 +51,21 @@ public class ConversationHistory {
          int summarizeEnd = this.conversationHistory.size() - TAIL_KEEP_COUNT;
          List<JsonObject> toSummarize = new ArrayList<>(this.conversationHistory.subList(1, summarizeEnd));
          String summary = this.summarizeHistory(toSummarize, player2apiService);
-         if (summary == "") {
-            this.conversationHistory.remove(1);
-         } else {
-            JsonObject systemPrompt = this.conversationHistory.get(0);
-            int tailStart = this.conversationHistory.size() - TAIL_KEEP_COUNT;
-            List<JsonObject> tail = new ArrayList<>(
-                  this.conversationHistory.subList(tailStart, this.conversationHistory.size()));
-            this.conversationHistory.clear();
-            this.conversationHistory.add(systemPrompt);
-            JsonObject summaryMsg = new JsonObject();
-            summaryMsg.addProperty("role", "assistant");
-            summaryMsg.addProperty("content", "Summary of earlier events: " + summary);
-            this.conversationHistory.add(summaryMsg);
-            this.conversationHistory.addAll(tail);
+         if (summary == null || summary.isEmpty()) {
+            // LLM 摘要失败，降级使用本地摘要保留上下文
+            summary = localFallbackSummarize(toSummarize);
          }
+         JsonObject systemPrompt = this.conversationHistory.get(0);
+         int tailStart = this.conversationHistory.size() - TAIL_KEEP_COUNT;
+         List<JsonObject> tail = new ArrayList<>(
+               this.conversationHistory.subList(tailStart, this.conversationHistory.size()));
+         this.conversationHistory.clear();
+         this.conversationHistory.add(systemPrompt);
+         JsonObject summaryMsg = new JsonObject();
+         summaryMsg.addProperty("role", "assistant");
+         summaryMsg.addProperty("content", "Summary of earlier events: " + summary);
+         this.conversationHistory.add(summaryMsg);
+         this.conversationHistory.addAll(tail);
 
          if (this.historyFile != null) {
             this.saveToFile();
@@ -86,11 +86,22 @@ public class ConversationHistory {
       try {
          String resp = player2apiService.completeConversationToString(temp);
          return resp;
-      } catch (Exception var6) {
-         var6.printStackTrace();
-         System.err.println("Error communicating with API");
+      } catch (Exception e) {
+         System.err.println("[ConversationHistory] Warning: LLM summarization failed, will use local fallback. Error: " + e.getMessage());
          return "";
       }
+   }
+
+   private String localFallbackSummarize(List<JsonObject> messages) {
+      StringBuilder sb = new StringBuilder();
+      for (JsonObject msg : messages) {
+         String role = msg.get("role").getAsString();
+         String content = msg.get("content").getAsString();
+         if ("user".equals(role) && content.length() > 5) {
+            sb.append("User: ").append(content, 0, Math.min(50, content.length())).append("; ");
+         }
+      }
+      return sb.length() > 0 ? sb.toString() : "Earlier conversation occurred.";
    }
 
    private void saveToFile() {
@@ -202,6 +213,25 @@ public class ConversationHistory {
 
    public List<JsonObject> getListJSON() {
       return this.conversationHistory;
+   }
+
+   /**
+    * 返回最近 N 条消息的摘要（用于日志调试）
+    */
+   public String getLastMessagesSummary(int count) {
+      StringBuilder sb = new StringBuilder();
+      int start = Math.max(0, this.conversationHistory.size() - count);
+      for (int i = start; i < this.conversationHistory.size(); i++) {
+         JsonObject msg = this.conversationHistory.get(i);
+         String role = msg.has("role") ? msg.get("role").getAsString() : "unknown";
+         String content = msg.has("content") ? msg.get("content").getAsString() : "";
+         // 截断过长的内容
+         if (content.length() > 200) {
+            content = content.substring(0, 200) + "...";
+         }
+         sb.append("    [").append(role).append("] ").append(content).append("\n");
+      }
+      return sb.toString();
    }
 
    // ReminderString adds a reminder to the latest user message if present.

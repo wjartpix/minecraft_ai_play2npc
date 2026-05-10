@@ -36,7 +36,7 @@ public abstract class ResourceTask extends Task implements ITaskCanForce {
    private boolean forceDimension = false;
    private Dimension targetDimension;
    private ContainerCache currentContainer;
-   protected boolean allowContainers = false;
+   protected boolean allowContainers = true;
 
    public ResourceTask(ItemTarget... itemTargets) {
       this.itemTargets = itemTargets;
@@ -219,6 +219,11 @@ public abstract class ResourceTask extends Task implements ITaskCanForce {
 
    public ResourceTask mineIfPresent(Block[] toMine) {
       this.mineIfPresent = toMine;
+      return this;
+   }
+
+   public ResourceTask withContainers(boolean allow) {
+      this.allowContainers = allow;
       return this;
    }
 

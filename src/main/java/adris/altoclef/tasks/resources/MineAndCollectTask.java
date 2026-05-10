@@ -3,6 +3,9 @@ package adris.altoclef.tasks.resources;
 import adris.altoclef.AltoClefController;
 import adris.altoclef.Debug;
 import adris.altoclef.multiversion.ToolMaterialVer;
+import adris.altoclef.player2api.AgentSideEffects;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import adris.altoclef.multiversion.blockpos.BlockPosVer;
 import adris.altoclef.tasks.AbstractDoToClosestObjectTask;
 import adris.altoclef.tasks.ResourceTask;
@@ -34,6 +37,7 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.phys.Vec3;
 
 public class MineAndCollectTask extends ResourceTask {
+   private static final Logger LOGGER = LogManager.getLogger();
    private final Block[] blocksToMine;
    private final MiningRequirement requirement;
    private final TimerGame cursorStackTimer = new TimerGame(3.0);
@@ -106,6 +110,15 @@ public class MineAndCollectTask extends ResourceTask {
    }
 
    @Override
+   public boolean isFinished() {
+      // If range timeout triggered, treat task as finished
+      if (this.subtask.isRangeTimeoutReached()) {
+         return true;
+      }
+      return super.isFinished();
+   }
+
+   @Override
    protected boolean isEqualResource(ResourceTask other) {
       return other instanceof MineAndCollectTask task ? Arrays.equals((Object[])task.blocksToMine, (Object[])this.blocksToMine) : false;
    }
@@ -149,6 +162,11 @@ public class MineAndCollectTask extends ResourceTask {
       private final Task pickupTask;
       private BlockPos miningPos;
 
+      // Range timeout: abort task if no target found within range for 15s
+      private long noTargetStartTime = 0;
+      private boolean rangeTimeoutTriggered = false;
+      private static final long NO_TARGET_TIMEOUT_MS = 15000; // 15 seconds
+
       public MineOrCollectTask(Block[] blocks, ItemTarget[] targets) {
          this.blocks = blocks;
          this.targets = targets;
@@ -170,15 +188,40 @@ public class MineAndCollectTask extends ResourceTask {
 
       @Override
       protected Optional<Object> getClosestTo(AltoClefController mod, Vec3 pos) {
+         // 获取owner位置作为活动中心
+         Vec3 ownerPos = getOwnerPosition(mod);
+         final double MAX_ACTIVITY_RADIUS = 50.0;
+
          Tuple<Double, Optional<BlockPos>> closestBlock = getClosestBlock(mod, pos, this.blocks);
          Tuple<Double, Optional<ItemEntity>> closestDrop = getClosestItemDrop(mod, pos, this.targets);
-         double blockSq = (Double)closestBlock.getA();
-         double dropSq = (Double)closestDrop.getA();
+
+         // 过滤：只选择距离owner在50格内的目标
+         Optional<BlockPos> filteredBlock = closestBlock.getB().filter(bp -> {
+            double dist = Math.sqrt(bp.distSqr(BlockPos.containing(ownerPos)));
+            return dist <= MAX_ACTIVITY_RADIUS;
+         });
+
+         Optional<ItemEntity> filteredDrop = closestDrop.getB().filter(item -> {
+            double dist = item.position().distanceTo(ownerPos);
+            return dist <= MAX_ACTIVITY_RADIUS;
+         });
+
+         // 用过滤后的结果选择最近目标
+         double blockSq = filteredBlock.isPresent() ? (Double)closestBlock.getA() : Double.MAX_VALUE;
+         double dropSq = filteredDrop.isPresent() ? (Double)closestDrop.getA() : Double.MAX_VALUE;
+
          if (mod.getExtraBaritoneSettings().isInteractionPaused()) {
-            return ((Optional)closestDrop.getB()).map(Object.class::cast);
+            return filteredDrop.map(Object.class::cast);
          } else {
-            return dropSq <= blockSq ? ((Optional)closestDrop.getB()).map(Object.class::cast) : ((Optional)closestBlock.getB()).map(Object.class::cast);
+            return dropSq <= blockSq ? filteredDrop.map(Object.class::cast) : filteredBlock.map(Object.class::cast);
          }
+      }
+
+      private Vec3 getOwnerPosition(AltoClefController mod) {
+         if (mod.getOwner() != null) {
+            return mod.getOwner().position();
+         }
+         return mod.getPlayer().position();
       }
 
       public static Tuple<Double, Optional<ItemEntity>> getClosestItemDrop(AltoClefController mod, Vec3 pos, ItemTarget... items) {
@@ -217,7 +260,28 @@ public class MineAndCollectTask extends ResourceTask {
             this.progressChecker.reset();
          }
 
-         return super.onTick();
+         Task result = super.onTick();
+
+         // Track range timeout: if continuously wandering (no target in range), start timer
+         if (this.wasWandering()) {
+            if (noTargetStartTime == 0) {
+               noTargetStartTime = System.currentTimeMillis();
+            }
+            long elapsed = System.currentTimeMillis() - noTargetStartTime;
+            if (elapsed >= NO_TARGET_TIMEOUT_MS && !rangeTimeoutTriggered) {
+               rangeTimeoutTriggered = true;
+               LOGGER.info("[ActivityRange] {}ms without finding target in range, aborting task", elapsed);
+               AgentSideEffects.speakProgress(mod, "主人，附近没有找到动物和食物，我们换个地方看看吧");
+            }
+         } else {
+            noTargetStartTime = 0; // Found target, reset timer
+         }
+
+         return result;
+      }
+
+      public boolean isRangeTimeoutReached() {
+         return rangeTimeoutTriggered;
       }
 
       @Override
@@ -265,6 +329,8 @@ public class MineAndCollectTask extends ResourceTask {
       protected void onStart() {
          this.progressChecker.reset();
          this.miningPos = null;
+         this.noTargetStartTime = 0;
+         this.rangeTimeoutTriggered = false;
       }
 
       @Override

@@ -2,6 +2,8 @@ package adris.altoclef.chains;
 
 import adris.altoclef.AltoClefController;
 import adris.altoclef.Debug;
+import adris.altoclef.tasks.movement.BodyLanguageTask;
+import adris.altoclef.tasksystem.Task;
 import adris.altoclef.tasksystem.TaskChain;
 import adris.altoclef.tasksystem.TaskRunner;
 import adris.altoclef.util.helpers.ItemHelper;
@@ -70,8 +72,14 @@ public class PlayerInteractionFixChain extends TaskChain {
          }
 
          if (mod.getInputControls().isHeldDown(Input.SNEAK)) {
-            if (this.shiftDepressTimeout.elapsed()) {
+            // Don't release SNEAK if a BodyLanguageTask is actively using it (e.g., SIT action)
+            Task currentTask = mod.getUserTaskChain().getCurrentTask();
+            boolean isBodyLangHolding = currentTask instanceof BodyLanguageTask;
+            if (!isBodyLangHolding && this.shiftDepressTimeout.elapsed()) {
                mod.getInputControls().release(Input.SNEAK);
+            } else if (isBodyLangHolding) {
+               // Reset timer so it doesn't fire immediately after BodyLanguageTask ends
+               this.shiftDepressTimeout.reset();
             }
          } else {
             this.shiftDepressTimeout.reset();

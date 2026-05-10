@@ -17,7 +17,6 @@ import net.minecraft.world.Container;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.level.block.entity.RandomizableContainerBlockEntity;
 
 public class StoreInContainerTask extends Task {
    public static final Block[] CONTAINER_BLOCKS = Stream.concat(
@@ -65,11 +64,11 @@ public class StoreInContainerTask extends Task {
             )) {
             this.setDebugState("Going to container");
             return new GetToBlockTask(this.containerPos);
-         } else if (!(this.controller.getWorld().getBlockEntity(this.containerPos) instanceof RandomizableContainerBlockEntity container)) {
-            Debug.logWarning("Block at " + this.containerPos + " is not a lootable container. Stopping.");
+         } else if (!(this.controller.getWorld().getBlockEntity(this.containerPos) instanceof Container container)) {
+            Debug.logWarning("Block at " + this.containerPos + " is not a container. Stopping.");
             return null;
          } else {
-            RandomizableContainerBlockEntity var19 = container;
+            Container var19 = container;
             LivingEntityInventory var20 = ((IInventoryProvider)this.controller.getEntity()).getLivingInventory();
             this.controller.getItemStorage().containers.WritableCache(this.controller, this.containerPos);
             this.setDebugState("Storing items");

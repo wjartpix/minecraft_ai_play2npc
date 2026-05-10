@@ -103,6 +103,16 @@ public class PersonaMatrix {
         return String.format("%s(%d=%s)", trait, value, level);
     }
 
+    /**
+     * 紧凑人格表示（~30 tokens vs 原版 ~100 tokens）
+     * 格式: O30/C60/E-20/A70/N-40
+     */
+    public String toCompactText() {
+        return String.format("O%d/C%d/E%d/A%d/N%d",
+            openness, conscientiousness, extraversion,
+            agreeableness, neuroticism);
+    }
+
     private static int clamp(int v) {
         return Math.max(-100, Math.min(100, v));
     }

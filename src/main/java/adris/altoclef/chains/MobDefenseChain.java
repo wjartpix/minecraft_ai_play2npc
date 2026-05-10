@@ -149,6 +149,8 @@ public class MobDefenseChain extends SingleTaskChain {
       return numberOfProblematicEntities;
    }
 
+   private static final float CRITICAL_HEALTH_THRESHOLD = 8.0F;
+
    @Override
    public float getPriority() {
       this.cachedLastPriority = this.getPriorityInner();
@@ -158,8 +160,24 @@ public class MobDefenseChain extends SingleTaskChain {
 
       // Player override: when player explicitly issues attack command, cap defense priority below UserTaskChain
       if (this.playerOverrideAttack && this.cachedLastPriority > 45.0F) {
-         Debug.logMessage("[MobDefense] Player override attack active, capping priority from %.1f to 45.0F", this.cachedLastPriority);
-         this.cachedLastPriority = 45.0F;
+         float health = this.controller.getPlayer().getHealth();
+         // Critical health: do NOT cap defense priority, survival comes first
+         if (health <= CRITICAL_HEALTH_THRESHOLD) {
+            Debug.logMessage("[MobDefense] Critical health %.1f, ignoring playerOverrideAttack cap!", health);
+         } else {
+            // Debug.logMessage("[MobDefense] Player override attack active, capping priority from %.1f to 45.0F", this.cachedLastPriority);
+            this.cachedLastPriority = 45.0F;
+         }
+      }
+
+      // 当用户正在执行主动命令时，仅在NPC生命危险时才允许防御链抢占
+      UserTaskChain utc = this.controller.getUserTaskChain();
+      if (utc != null && utc.isUserCommandActive() && this.cachedLastPriority > 45.0F) {
+         float health = this.controller.getPlayer().getHealth();
+         if (health > 6.0F) {  // 非生命危险（>3心）
+            // 限制防御链优先级到45，低于UserTaskChain的100
+            this.cachedLastPriority = 45.0F;
+         }
       }
 
       this.prevHealth = this.controller.getPlayer().getHealth();
@@ -281,7 +299,11 @@ public class MobDefenseChain extends SingleTaskChain {
                   && !mod.getMLGBucketChain().isFalling(mod)
                   && mod.getMLGBucketChain().doneMLG()
                   && !mod.getMLGBucketChain().isChorusFruiting()) {
-                  this.doForceField(mod);
+                  // Skip force field when player explicitly issued attack command to prevent
+                  // KillAura from stealing attack cooldown and interfering with the attack task.
+                  if (!this.playerOverrideAttack) {
+                     this.doForceField(mod);
+                  }
                   if (mod.getPlayer().getHealth() <= 10.0F && !hasShield(mod)) {
                      if (StorageHelper.getNumberOfThrowawayBlocks(mod) > 0
                         && !mod.getFoodChain().needsToEat()
@@ -653,6 +675,10 @@ public class MobDefenseChain extends SingleTaskChain {
 
    public void setPlayerOverrideAttack(boolean override) {
       this.playerOverrideAttack = override;
+   }
+
+   public boolean isPlayerOverrideAttack() {
+      return this.playerOverrideAttack;
    }
 
    public boolean isDoingAcrobatics() {

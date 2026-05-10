@@ -89,12 +89,17 @@ public class SmeltInFurnaceTask extends ResourceTask {
             Debug.logWarning("Smelting task is running, but all targets are met. This should not happen.");
             return null;
          } else {
-            this.smeltTimer.setInterval(10 * currentTarget.getItem().getTargetCount());
-            int fuelNeeded = (int)Math.ceil(currentTarget.getItem().getTargetCount() / 8.0);
+            // Dynamically calculate how many more cooked items are actually needed
+            int cookedHave = controller.getItemStorage().getItemCount(currentTarget.getItem());
+            int cookedStillNeeded = currentTarget.getItem().getTargetCount() - cookedHave;
+            this.smeltTimer.setInterval(10 * cookedStillNeeded);
+            int fuelNeeded = (int)Math.ceil(cookedStillNeeded / 8.0);
             if (!this.isSmelting) {
-               if (controller.getItemStorage().getItemCount(currentTarget.getMaterial()) < currentTarget.getMaterial().getTargetCount()) {
+               int rawHave = controller.getItemStorage().getItemCount(currentTarget.getMaterial());
+               if (rawHave < cookedStillNeeded) {
                   this.setDebugState("Collecting materials for smelting: " + currentTarget.getMaterial());
-                  return TaskCatalogue.getItemTask(currentTarget.getMaterial());
+                  // Only request the amount actually needed, not the full inflated material target
+                  return TaskCatalogue.getItemTask(currentTarget.getMaterial().getMatches()[0], cookedStillNeeded);
                }
 
                if (StorageHelper.calculateInventoryFuelCount(controller) < fuelNeeded) {
@@ -103,18 +108,38 @@ public class SmeltInFurnaceTask extends ResourceTask {
                }
             }
 
-            if (this.furnacePos == null || !controller.getWorld().getBlockState(this.furnacePos).is(Blocks.FURNACE)) {
+            if (this.furnacePos == null
+               || !(controller.getWorld().getBlockState(this.furnacePos).is(Blocks.FURNACE)
+                  || controller.getWorld().getBlockState(this.furnacePos).is(Blocks.SMOKER))) {
+               // Prefer smoker for food (2x speed), fallback to furnace
+               Optional<BlockPos> nearestSmoker = controller.getBlockScanner().getNearestBlock(Blocks.SMOKER);
                Optional<BlockPos> nearestFurnace = controller.getBlockScanner().getNearestBlock(Blocks.FURNACE);
-               if (nearestFurnace.isPresent()
-                  && !nearestFurnace.get()
+               double furnaceSearchRange = controller.getModSettings().getResourceChestLocateRange();
+
+               // Choose closest valid furnace/smoker
+               Optional<BlockPos> chosen = Optional.empty();
+               if (nearestSmoker.isPresent()
+                  && nearestSmoker.get()
                      .closerThan(
                         new Vec3i((int)controller.getEntity().position().x, (int)controller.getEntity().position().y, (int)controller.getEntity().position().z),
-                        100.0
+                        furnaceSearchRange
                      )) {
-                  nearestFurnace = Optional.empty();
+                  chosen = nearestSmoker;
+               }
+               if (nearestFurnace.isPresent()
+                  && nearestFurnace.get()
+                     .closerThan(
+                        new Vec3i((int)controller.getEntity().position().x, (int)controller.getEntity().position().y, (int)controller.getEntity().position().z),
+                        furnaceSearchRange
+                     )) {
+                  if (chosen.isEmpty()
+                     || nearestFurnace.get().distSqr(BlockPos.containing(controller.getPlayer().position()))
+                        < chosen.get().distSqr(BlockPos.containing(controller.getPlayer().position()))) {
+                     chosen = nearestFurnace;
+                  }
                }
 
-               if (!nearestFurnace.isPresent()) {
+               if (chosen.isEmpty()) {
                   if (controller.getItemStorage().hasItem(Items.FURNACE)) {
                      this.setDebugState("Placing furnace.");
                      return new PlaceBlockNearbyTask(Blocks.FURNACE);
@@ -124,7 +149,7 @@ public class SmeltInFurnaceTask extends ResourceTask {
                   return TaskCatalogue.getItemTask(Items.FURNACE, 1);
                }
 
-               this.furnacePos = nearestFurnace.get();
+               this.furnacePos = chosen.get();
             }
 
             if (!this.furnacePos

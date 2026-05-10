@@ -5,7 +5,7 @@ import adris.altoclef.commandsystem.Arg;
 import adris.altoclef.commandsystem.ArgParser;
 import adris.altoclef.commandsystem.Command;
 import adris.altoclef.commandsystem.CommandException;
-import adris.altoclef.tasks.resources.CollectMeatTask;
+import adris.altoclef.tasks.resources.CollectFoodForOwnerTask;
 import adris.altoclef.util.helpers.StorageHelper;
 
 public class MeatCommand extends Command {
@@ -21,6 +21,6 @@ public class MeatCommand extends Command {
    protected void call(AltoClefController mod, ArgParser parser) throws CommandException {
       int count = parser.get(Integer.class);
       count += StorageHelper.calculateInventoryFoodScore(mod);
-      mod.runUserTask(new CollectMeatTask(count), () -> this.finish());
+      mod.runUserTask(new CollectFoodForOwnerTask(count), () -> this.finish());
    }
 }

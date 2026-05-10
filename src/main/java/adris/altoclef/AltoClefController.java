@@ -18,6 +18,7 @@ import adris.altoclef.control.SlotHandler;
 import adris.altoclef.player2api.manager.ConversationManager;
 import adris.altoclef.player2api.AIPersistantData;
 import adris.altoclef.player2api.Player2APIService;
+import adris.altoclef.player2api.AgentSideEffects;
 
 import adris.altoclef.player2api.Character;
 import adris.altoclef.tasksystem.Task;
@@ -29,7 +30,6 @@ import adris.altoclef.trackers.MiscBlockTracker;
 import adris.altoclef.trackers.SimpleChunkTracker;
 import adris.altoclef.trackers.TrackerManager;
 import adris.altoclef.trackers.UserBlockRangeTracker;
-import adris.altoclef.trackers.storage.ContainerSubTracker;
 import adris.altoclef.trackers.storage.ItemStorageTracker;
 import baritone.Baritone;
 import baritone.api.IBaritone;
@@ -64,7 +64,6 @@ public class AltoClefController {
    private MobDefenseChain mobDefenseChain;
    private MLGBucketFallChain mlgBucketChain;
    private ItemStorageTracker storageTracker;
-   private ContainerSubTracker containerSubTracker;
    private EntityTracker entityTracker;
    private BlockScanner blockScanner;
    private SimpleChunkTracker chunkTracker;
@@ -80,6 +79,24 @@ public class AltoClefController {
    private Task storedTask;
    public boolean isStopping = false;
    private Player owner;
+
+   // NPC survival monitoring
+   private static final float DANGEROUS_HEALTH_THRESHOLD = 8.0F;
+   private static final float CRITICAL_HEALTH_THRESHOLD = 6.0F;
+   private static final long HELP_REQUEST_COOLDOWN_MS = 30000L;
+   private static final long AUTO_EAT_COOLDOWN_MS = 5000L;
+   private long lastHelpRequestTime = 0L;
+   private long lastAutoEatTime = 0L;
+   private static final java.util.List<String> HELP_MESSAGES = java.util.Arrays.asList(
+      "主人！我要被苦力怕炸飞了，快救救我！",
+      "救命啊！这些怪物不讲武德，群殴我一个！",
+      "我的血条已经见底了，主人你倒是管管我啊！",
+      "啊——！我要寄了！主人快给我扔点金苹果！",
+      "主人！我快变成灰了，快用你的神之手救我一下！",
+      "救命！我要被怪物打成筛子了！",
+      "主人！我血快没了，先溜了！",
+      "哎呀！痛痛痛！主人快来护驾！"
+   );
 
    public AltoClefController(IBaritone baritone, Character character, String player2GameId) {
       this.baritone = baritone;
@@ -97,7 +114,7 @@ public class AltoClefController {
       this.foodChain = new FoodChain(this.taskRunner);
       new PlayerDefenseChain(this.taskRunner);
       this.storageTracker = new ItemStorageTracker(this, this.trackerManager,
-            container -> this.containerSubTracker = container);
+            container -> {});
       this.entityTracker = new EntityTracker(this.trackerManager);
       this.blockScanner = new BlockScanner(this);
       this.chunkTracker = new SimpleChunkTracker(this);
@@ -147,6 +164,40 @@ public class AltoClefController {
       // 情绪自然衰减
       if (this.aiPersistantData != null && this.aiPersistantData.getSoulProfile() != null) {
          this.aiPersistantData.getSoulProfile().tickEmotionDecay();
+      }
+      // NPC survival monitoring: auto-heal and cry for help when health is low
+      this.tickSurvivalMonitor();
+   }
+
+   private void tickSurvivalMonitor() {
+      if (this.getPlayer() == null) return;
+      float health = this.getPlayer().getHealth();
+      float maxHealth = this.getPlayer().getMaxHealth();
+      long now = System.currentTimeMillis();
+
+      // Critical health: auto-eat to recover saturation/health
+      if (health <= DANGEROUS_HEALTH_THRESHOLD) {
+         // Release player override so MobDefenseChain can run away
+         if (this.mobDefenseChain != null && this.mobDefenseChain.isPlayerOverrideAttack()) {
+            this.mobDefenseChain.setPlayerOverrideAttack(false);
+            Debug.logMessage("[Survival] Health low (%.1f), releasing playerOverrideAttack for defense", health);
+         }
+         // Try to eat food
+         if (now - lastAutoEatTime > AUTO_EAT_COOLDOWN_MS && this.foodChain != null) {
+            Debug.logMessage("[Survival] Auto-eating triggered (health=%.1f)", health);
+            this.foodChain.requestEat();
+            lastAutoEatTime = now;
+         }
+      }
+
+      // Very critical health: cry for help with funny messages
+      if (health <= CRITICAL_HEALTH_THRESHOLD) {
+         if (now - lastHelpRequestTime > HELP_REQUEST_COOLDOWN_MS) {
+            int idx = (int)(Math.random() * HELP_MESSAGES.size());
+            String msg = HELP_MESSAGES.get(idx);
+            AgentSideEffects.speakProgress(this, msg);
+            lastHelpRequestTime = now;
+         }
       }
    }
 

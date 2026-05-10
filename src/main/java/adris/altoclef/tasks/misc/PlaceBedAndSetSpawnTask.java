@@ -4,6 +4,7 @@ import adris.altoclef.AltoClefController;
 import adris.altoclef.Debug;
 import adris.altoclef.TaskCatalogue;
 import adris.altoclef.multiversion.blockpos.BlockPosVer;
+import adris.altoclef.player2api.AgentSideEffects;
 import adris.altoclef.tasks.DoToClosestBlockTask;
 import adris.altoclef.tasks.InteractWithBlockTask;
 import adris.altoclef.tasks.construction.DestroyBlockTask;
@@ -71,8 +72,10 @@ public class PlaceBedAndSetSpawnTask extends Task {
       this.BED_PLACE_POS.offset(2, 0, -2)
    };
    private final Direction BED_PLACE_DIRECTION = Direction.UP;
-   private final TimerGame bedInteractTimeout = new TimerGame(5.0);
+   private final TimerGame bedInteractTimeout = new TimerGame(30.0);
    private final TimerGame inBedTimer = new TimerGame(1.0);
+   private final TimerGame simulatedSleepTimer = new TimerGame(8.0);
+   private final TimerGame overallTimeout = new TimerGame(60.0);
    private final MovementProgressChecker progressChecker = new MovementProgressChecker();
    private boolean stayInBed;
    private BlockPos currentBedRegion;
@@ -81,6 +84,9 @@ public class PlaceBedAndSetSpawnTask extends Task {
    private boolean spawnSet;
    private boolean sleepAttemptMade;
    private boolean wasSleeping;
+   private boolean hasSleptOnce;
+   private boolean timeoutFeedbackSent;
+   private boolean simulatedSleepDone;
    private BlockPos bedForSpawnPoint;
 
    public PlaceBedAndSetSpawnTask stayInBed() {
@@ -128,6 +134,11 @@ public class PlaceBedAndSetSpawnTask extends Task {
       this.spawnSet = false;
       this.sleepAttemptMade = false;
       this.wasSleeping = false;
+      this.hasSleptOnce = false;
+      this.timeoutFeedbackSent = false;
+      this.simulatedSleepDone = false;
+      this.simulatedSleepTimer.reset();
+      this.overallTimeout.reset();
       Debug.logInternal("Started onStart() method");
       Debug.logInternal("Current bed region: " + this.currentBedRegion);
       Debug.logInternal("Spawn set: " + this.spawnSet);
@@ -136,6 +147,13 @@ public class PlaceBedAndSetSpawnTask extends Task {
    @Override
    protected Task onTick() {
       AltoClefController mod = this.controller;
+      
+      // Track sleep state: once the player enters sleeping state, mark it
+      if (mod.getPlayer().isSleeping()) {
+         this.hasSleptOnce = true;
+         this.wasSleeping = true;
+      }
+      
       if (!this.progressChecker.check(mod) && this.currentBedRegion != null) {
          this.progressChecker.reset();
          Debug.logMessage("Searching new bed region.");
@@ -173,6 +191,13 @@ public class PlaceBedAndSetSpawnTask extends Task {
                         closeEnough = true;
                      }
                   }
+                  // FIX: NPC entities may fail raycast but can still be close enough to "rest"
+                  if (!closeEnough) {
+                     double distSq = mod.getPlayer().distanceToSqr(centerBed.x, centerBed.y, centerBed.z);
+                     if (distSq < 2.5 * 2.5) {
+                        closeEnough = true;
+                     }
+                  }
                }
 
                this.bedForSpawnPoint = WorldHelper.getBedHead(this.controller, toSleepIn);
@@ -187,12 +212,12 @@ public class PlaceBedAndSetSpawnTask extends Task {
                      return new GetToBlockTask(this.bedForSpawnPoint.offset(side.getNormal()));
                   } catch (IllegalArgumentException var7) {
                   }
-               } else {
+                  this.sleepAttemptMade = false;
+               } else if (!this.sleepAttemptMade) {
+                  this.sleepAttemptMade = true;
                   this.inBedTimer.reset();
-               }
-
-               if (closeEnough) {
-                  this.inBedTimer.reset();
+                  this.bedInteractTimeout.reset();
+                  this.simulatedSleepTimer.reset();
                }
 
                this.progressChecker.reset();
@@ -338,11 +363,55 @@ public class PlaceBedAndSetSpawnTask extends Task {
       } else {
          boolean isSleeping = this.controller.getPlayer().isSleeping();
          boolean timerElapsed = this.inBedTimer.elapsed();
-         boolean isFinished = this.spawnSet && !isSleeping && timerElapsed;
-         Debug.logInternal("isSleeping: " + isSleeping);
-         Debug.logInternal("timerElapsed: " + timerElapsed);
-         Debug.logInternal("isFinished: " + isFinished);
-         return isFinished;
+         
+         if (this.stayInBed) {
+            // stayInBed mode: task completes when NPC slept and woke up (daytime)
+            boolean finished = this.hasSleptOnce && !isSleeping && timerElapsed;
+
+            // FIX: NPC entities (LivingEntity but not Player) cannot truly sleep in beds.
+            // If sleep attempt was made but entity never fell asleep, simulate resting.
+            if (!finished && this.sleepAttemptMade && !this.hasSleptOnce) {
+               if (this.simulatedSleepTimer.elapsed() && !this.simulatedSleepDone) {
+                  this.simulatedSleepDone = true;
+                  Debug.logInternal("Simulated sleep completed (NPC cannot use beds)");
+                  if (!this.timeoutFeedbackSent) {
+                     this.timeoutFeedbackSent = true;
+                     AgentSideEffects.speakProgress(this.controller, "主人，我已经在床边休息好了~");
+                  }
+                  return true;
+               }
+               if (this.bedInteractTimeout.elapsed()) {
+                  Debug.logInternal("Sleep attempt timed out, bed may be occupied or it's not night time");
+                  if (!this.timeoutFeedbackSent) {
+                     this.timeoutFeedbackSent = true;
+                     AgentSideEffects.speakProgress(this.controller, "主人，现在好像没法睡觉呢，等条件合适了我再去睡吧~");
+                  }
+                  return true;
+               }
+            }
+
+            // Global safety timeout: force exit if task runs too long
+            if (this.overallTimeout.elapsed()) {
+               Debug.logInternal("Overall sleep task timed out, forcing exit");
+               if (!this.timeoutFeedbackSent) {
+                  this.timeoutFeedbackSent = true;
+                  AgentSideEffects.speakProgress(this.controller, "主人，我尝试了很久但还是没法休息，我先退下了~");
+               }
+               return true;
+            }
+
+            Debug.logInternal("isSleeping: " + isSleeping);
+            Debug.logInternal("timerElapsed: " + timerElapsed);
+            Debug.logInternal("hasSleptOnce: " + this.hasSleptOnce);
+            Debug.logInternal("stayInBed isFinished: " + finished);
+            return finished;
+         } else {
+            boolean isFinished = this.spawnSet && !isSleeping && timerElapsed;
+            Debug.logInternal("isSleeping: " + isSleeping);
+            Debug.logInternal("timerElapsed: " + timerElapsed);
+            Debug.logInternal("isFinished: " + isFinished);
+            return isFinished;
+         }
       }
    }
 

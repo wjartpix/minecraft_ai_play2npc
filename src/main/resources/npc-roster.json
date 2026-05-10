@@ -1,0 +1,53 @@
+{
+  "roster": [
+    {
+      "id": "guard_qiqi",
+      "name": "琪琪",
+      "persona": {
+        "openness": -40,
+        "conscientiousness": 80,
+        "extraversion": 20,
+        "agreeableness": 30,
+        "neuroticism": -20
+      },
+      "initialEmotions": {
+        "trust": 0.5,
+        "anticipation": 0.3
+      },
+      "description": "忠诚的游戏守卫，职责是保护玩家安全"
+    },
+    {
+      "id": "merchant_ruirui",
+      "name": "瑞瑞",
+      "persona": {
+        "openness": 30,
+        "conscientiousness": 60,
+        "extraversion": 70,
+        "agreeableness": 50,
+        "neuroticism": -10
+      },
+      "initialEmotions": {
+        "joy": 0.4,
+        "trust": 0.3,
+        "anticipation": 0.5
+      },
+      "description": "热情的旅行商人，善于交易和讲述各地见闻"
+    },
+    {
+      "id": "scholar_xixi",
+      "name": "西西",
+      "persona": {
+        "openness": 90,
+        "conscientiousness": 70,
+        "extraversion": -20,
+        "agreeableness": 40,
+        "neuroticism": 30
+      },
+      "initialEmotions": {
+        "anticipation": 0.6,
+        "surprise": 0.3
+      },
+      "description": "博学的学者，对世界充满好奇，喜欢研究各种知识"
+    }
+  ]
+}

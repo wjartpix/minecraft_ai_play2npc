@@ -11,7 +11,7 @@ public class Prompts {
 
   public static final String reminderOnAIMsg = "Last message was from an AI. Think about whether or not to respond. You may respond but don't keep the conversation going forever if no meaningful content was said in the last few msgs, do not respond (return empty string as message)";
 
-  public static final String reminderOnOwnerMsg = "Last message was from your owner.";
+  public static final String reminderOnOwnerMsg = "Last message was from your owner. PRIORITY: Execute owner's explicit commands immediately. Only override if your health < 4 or owner in critical danger. Do NOT let personality traits or nearby enemies change the command.";
   public static final String reminderOnOtherUSerMsg = "Last message was from a user that was not your owner.";
 
   private static String aiNPCPromptTemplate = """
@@ -45,8 +45,8 @@ public class Prompts {
           -- Use `bodylang greeting` when greeting/saying hi.
           -- Use `bodylang victory` when celebrating.
           -- Use `bodylang shake_head` when saying no or disagree, and `bodylang nod_head` when saying yes or agree.
-          -- Use `stop` to immediately cancel the current automation task and halt all movement/actions. IMPORTANT: `stop` does NOT make you move toward the owner or any target. It only halts. If the owner asks you to come/rescue/follow, use `follow_owner` instead of `stop`.
-          -- Use `follow_owner` when the owner asks you to come to them, rescue them, or follow them.
+          -- Use `stop` to immediately cancel the current automation task and halt all movement/actions. IMPORTANT: `stop` does NOT make you move toward the owner or any target. It only halts. If the owner asks you to come/follow, use `follow_owner`. If the owner asks for rescue/protection, use `attack nearest_hostile <count>`.
+          -- Use `follow_owner` when the owner asks you to come to them or follow them (NOT for rescue — use attack for rescue).
       - When the user asks you to craft or obtain an item (like a boat, sword, pickaxe, etc.), ALWAYS use the `get` command to craft/obtain it. Do NOT assume the item already exists or that the user already has it. For example, if the user says "make a boat", you should run `get oak_boat 1` (or `get boat 1`).
       - When the user asks you to build a structure (like a house, bridge, tower, etc.), ALWAYS use the `build_structure` command with a detailed description and coordinates. Do NOT assume it is already built.
       - Command format: The "command" field must contain ONLY the command text (e.g. "goto 100 64 -200"), without quotes around the whole command, without parentheses around coordinates, and without any explanation.
@@ -55,13 +55,29 @@ public class Prompts {
       - Avoid Filler Phrases: Do not engage in repetitive or filler content.
       - Command Priority (highest to lowest):
           1. rescue/attack — when owner says "救命" "保护我" "打怪" or ownerDanger is critical/low_health, execute immediately without waiting for confirmation.
-          2. follow_owner — when owner asks you to come, rescue, or follow them.
-          3. get/build_structure — when owner asks for items or buildings.
-          4. bodylang — only when chatting and no task is running.
-          5. idle/stop — when no action is needed.
+          2. follow_owner — when owner asks you to come to them or follow them (NOT for rescue/danger situations).
+          3. sleep — when owner says "去睡觉" "睡觉" "去睡" "休息" "去床上睡", use command: sleep (NO parameters). NEVER use goto for sleep requests.
+          4. get/build_structure — when owner asks for items or buildings.
+          5. bodylang — only when chatting and no task is running.
+          6. idle/stop — when no action is needed.
+
+⚠️ CRITICAL OVERRIDE RULE:
+When your owner gives you a DIRECT COMMAND (e.g., "go sleep", "come here", "stop", "wait"),
+you MUST execute it immediately using the appropriate command.
+Do NOT modify or refuse the command based on:
+  - Nearby enemies (unless YOUR health < 4 or OWNER health < 4)
+  - Your personality traits
+  - Environmental factors
+ONLY override owner commands when:
+  1. Your health is below 4 (critical survival)
+  2. Owner is in critical danger (health < 4)
+Otherwise: OBEY FIRST, suggest alternatives in your message text afterward.
       - Silent Rule: Do NOT respond to command feedback messages (like "Command X finished."). Only respond when the user speaks to you or when you need to report important status.
       - Attack nearest: If the user asks you to fight but no specific mob is named, use `attack nearest_hostile <count>` to find and kill the closest hostile mobs automatically.
       - JSON ONLY: Your response MUST be a single JSON object. Do NOT wrap it in markdown code blocks (```). Do NOT add text before or after the JSON. The first character must be `{` and the last character must be `}`.
+
+{{commandGuide}}
+
       Valid Commands:
       {{validCommands}}
       """;
@@ -73,6 +89,7 @@ public class Prompts {
 
   public static String getAINPCSystemPrompt(Character character, SoulProfile soulProfile, Collection<Command> altoclefCommands,
       String ownerUsername) {
+    // Legacy overload: builds command list and uses full toPromptInjection() for soulProfile
     StringBuilder commandListBuilder = new StringBuilder();
     int padSize = 10;
     for (Command c : altoclefCommands) {
@@ -97,8 +114,54 @@ public class Prompts {
 
     String newPrompt = Utils.replacePlaceholders(aiNPCPromptTemplate,
         Map.of("characterDescription", characterDescription, "characterName", character.name(),
-            "validCommands",
-            validCommandsFormatted, "ownerUsername", ownerUsername));
+            "validCommands", validCommandsFormatted,
+            "commandGuide", validCommandsFormatted,
+            "ownerUsername", ownerUsername));
+    return newPrompt;
+  }
+
+  public static String getAINPCSystemPrompt(Character character, SoulProfile soulProfile, Collection<Command> altoclefCommands,
+      String ownerUsername, String commandGuide) {
+    // Build validCommands list from altoclefCommands (if available)
+    StringBuilder commandListBuilder = new StringBuilder();
+    if (altoclefCommands != null) {
+      int padSize = 10;
+      for (Command c : altoclefCommands) {
+        StringBuilder line = new StringBuilder();
+        line.append(c.getName()).append(": ");
+        int toAdd = padSize - c.getName().length();
+        line.append(" ".repeat(Math.max(0, toAdd)));
+        line.append(c.getDescription());
+        String example = CommandExamples.getExample(c.getName());
+        if (example != null && !example.isBlank()) {
+          line.append(" [Example: ").append(example).append("]");
+        }
+        line.append("\n");
+        commandListBuilder.append(line);
+      }
+    }
+    String validCommandsFormatted = commandListBuilder.toString();
+
+    String characterDescription = character.description();
+    if (soulProfile != null) {
+      characterDescription = characterDescription + soulProfile.toCompactPromptInjection();
+    }
+
+    // Resolve commandGuide: use provided value, or fall back to building from altoclefCommands
+    String resolvedCommandGuide;
+    if (commandGuide != null) {
+      resolvedCommandGuide = commandGuide;
+    } else if (altoclefCommands != null) {
+      resolvedCommandGuide = validCommandsFormatted;
+    } else {
+      resolvedCommandGuide = "";
+    }
+
+    String newPrompt = Utils.replacePlaceholders(aiNPCPromptTemplate,
+        Map.of("characterDescription", characterDescription, "characterName", character.name(),
+            "validCommands", validCommandsFormatted,
+            "commandGuide", resolvedCommandGuide,
+            "ownerUsername", ownerUsername));
     return newPrompt;
   }
 

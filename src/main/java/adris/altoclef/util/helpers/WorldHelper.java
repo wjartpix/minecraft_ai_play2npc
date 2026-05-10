@@ -351,15 +351,15 @@ public interface WorldHelper {
    static boolean canSleep(AltoClefController controller) {
       Level world = controller.getWorld();
       if (world != null) {
-         if (world.isThundering() && world.isRaining()) {
+         // 下雨或雷暴时都可以睡觉
+         if (world.isRaining() || world.isThundering()) {
             return true;
-         } else {
-            int time = getTimeOfDay(controller);
-            return 12542 <= time && time <= 23992;
          }
-      } else {
-         return false;
+         // 夜间可以睡觉
+         int time = getTimeOfDay(controller);
+         return 12542 <= time && time <= 23992;
       }
+      return false;
    }
 
    static int getTimeOfDay(AltoClefController controller) {

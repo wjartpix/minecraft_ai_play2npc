@@ -18,7 +18,7 @@ public abstract class Task {
       this.controller = parentChain.controller;
       parentChain.addTaskToChain(this);
       if (this.first) {
-         Debug.logInternal("Task START: " + this);
+         // Debug.logInternal("Task START: " + this);
          this.active = true;
          this.onStart();
          this.first = false;
@@ -61,7 +61,7 @@ public abstract class Task {
 
    public void stop(Task interruptTask) {
       if (this.active) {
-         Debug.logInternal("Task STOP: " + this + ", interrupted by " + interruptTask);
+         // Debug.logInternal("Task STOP: " + this + ", interrupted by " + interruptTask);
          if (!this.first) {
             this.onStop(interruptTask);
          }
